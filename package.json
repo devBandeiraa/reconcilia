@@ -11,15 +11,16 @@
     "node": ">=24.11.0 <25"
   },
   "scripts": {
-    "build:shared": "pnpm --filter @reconcilia/shared build",
-    "dev": "pnpm build:shared && pnpm --parallel --filter @reconcilia/shared --filter @reconcilia/api --filter @reconcilia/web run dev",
-    "build": "pnpm -r run build",
-    "lint": "pnpm build:shared && eslint .",
-    "typecheck": "pnpm build:shared && pnpm -r run typecheck",
-    "test": "pnpm build:shared && pnpm -r run test",
+    "codegen": "pnpm --filter @reconcilia/shared build && pnpm --filter @reconcilia/api db:generate",
+    "dev": "pnpm codegen && pnpm --parallel --filter @reconcilia/shared --filter @reconcilia/api --filter @reconcilia/web run dev",
+    "build": "pnpm codegen && pnpm -r run build",
+    "lint": "pnpm codegen && eslint .",
+    "typecheck": "pnpm codegen && pnpm -r run typecheck",
+    "test": "pnpm codegen && pnpm -r run test",
+    "db:reset": "pnpm --filter @reconcilia/api db:reset",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky && pnpm build:shared"
+    "prepare": "husky && pnpm codegen"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.4",
