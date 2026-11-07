@@ -12,3 +12,6 @@ next-env.d.ts
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Prisma Client gerado (pnpm codegen)
+apps/api/src/generated/
