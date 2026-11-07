@@ -1,0 +1,21 @@
+# Banco local para desenvolvimento e testes. Credenciais só de uso local (não são segredos).
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: reconcilia
+      POSTGRES_PASSWORD: reconcilia
+      POSTGRES_DB: reconcilia
+    # 5440 no host para não colidir com um PostgreSQL local na 5432.
+    ports:
+      - '5440:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U reconcilia -d reconcilia']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
