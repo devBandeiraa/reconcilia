@@ -46,7 +46,7 @@ export default async function Home() {
         )}
       </section>
 
-      <p className="text-sm text-zinc-500">Versão 0.1.0 · as telas chegam na fase 9.</p>
+      <p className="text-sm text-zinc-500">As telas de casos chegam na fase 9.</p>
     </main>
   );
 }

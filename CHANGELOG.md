@@ -7,6 +7,33 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.3.0] - 2026-11-07
+
+### Adicionado
+
+- Simulador de loja, gateway e ERP (`apps/simulator`): gerador determinístico por seed (PRNG
+  sem dependência), as três falhas (`lost`, `duplicate`, `mismatch`, no máximo uma por pedido) e
+  o gabarito com os tipos de caso da conciliação.
+- CLI `pnpm --filter simulator start` com `--orders`, `--lost`, `--duplicate`, `--mismatch`,
+  `--seed`, `--json` e `--dry-run`; lê `API_URL` e `WEBHOOK_SECRET`.
+- Contratos externos em `packages/shared`: `StoreWebhook` (`order.created`), `GatewayWebhook`
+  (`charge.*`), `ErpWebhook` (`*.recorded`), extrato do gateway e opções/resultado da simulação.
+- `POST /webhooks/store`, `/webhooks/gateway` e `/webhooks/erp`: validam com Zod, traduzem para
+  o modelo interno, gravam o evento bruto e respondem `202`; reenvio é ignorado.
+- Extrato do gateway simulado: tabela `sim_gateway_statement` (`charge_id` único, CHECK de
+  valor) e `POST`/`GET /sim/gateway/statement` com filtro e paginação.
+- `POST /simulate`: roda o mesmo gerador e devolve a seed e o gabarito.
+- Mensagens assinadas com HMAC-SHA256 no header `X-Signature`, documentado no OpenAPI como
+  esquema `webhookSignature`.
+- `WEBHOOK_SECRET` validado: em produção, a api não sobe com o segredo de desenvolvimento nem
+  com menos de 32 caracteres.
+- ADR 0003: simulador determinístico e sistemas externos simulados.
+
+### Corrigido
+
+- A api se anunciava `0.1.0` no `/health` e no OpenAPI mesmo depois da v0.2.0: as versões dos
+  pacotes passam a acompanhar a release. A web deixa de exibir versão fixa.
+
 ## [0.2.0] - 2026-11-07
 
 ### Adicionado
@@ -53,6 +80,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
   formulários de issue.
 - ADR 0001: monorepo com pnpm workspaces.
 
-[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.2.0...HEAD
+[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/devBandeiraa/reconcilia/releases/tag/v0.1.0

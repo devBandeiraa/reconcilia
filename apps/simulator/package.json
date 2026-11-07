@@ -1,14 +1,31 @@
 {
   "name": "@reconcilia/simulator",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Simulador de loja, gateway e ERP (implementado na fase 3).",
+  "description": "Simulador de loja, gateway e ERP: gera tráfego com as 3 falhas e o gabarito.",
   "scripts": {
-    "start": "tsx src/index.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "start": "tsx src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "tsx": "4.23.15"
+    "tsx": "4.23.15",
+    "vitest": "5.1.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/lib/index.d.ts",
+      "default": "./dist/lib/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@reconcilia/shared": "workspace:*",
+    "zod": "4.6.7"
   }
 }
