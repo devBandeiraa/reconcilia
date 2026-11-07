@@ -188,3 +188,18 @@ model Action {
   @@index([investigationId])
   @@map("actions")
 }
+
+/// Extrato do gateway SIMULADO: representa um sistema externo, não dados do Reconcilia.
+/// Num gateway real viria da API de conciliação dele. charge_id único torna o reenvio idempotente.
+/// CHECK: amount_cents >= 0.
+model SimGatewayStatementEntry {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  chargeId        String   @unique @map("charge_id")
+  eventId         String   @map("event_id")
+  orderExternalId String   @map("order_external_id")
+  amountCents     Int      @map("amount_cents")
+  capturedAt      DateTime @map("captured_at") @db.Timestamptz(3)
+
+  @@index([orderExternalId])
+  @@map("sim_gateway_statement")
+}

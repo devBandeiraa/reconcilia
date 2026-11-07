@@ -14,6 +14,7 @@ const TABLES = [
   'erp_events',
   'payment_events',
   'orders',
+  'sim_gateway_statement',
 ];
 
 export function createTestPrisma(): PrismaClient {
