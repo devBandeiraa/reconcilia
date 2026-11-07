@@ -3,6 +3,8 @@ import { LoggerModule } from 'nestjs-pino';
 import type { Env } from './config/env.js';
 import { HealthController } from './health/health.controller.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { SimulationModule } from './simulation/simulation.module.js';
+import { WebhooksModule } from './webhooks/webhooks.module.js';
 
 @Module({})
 export class AppModule {
@@ -20,6 +22,8 @@ export class AppModule {
           },
         }),
         PrismaModule.forRoot(env.DATABASE_URL),
+        WebhooksModule,
+        SimulationModule,
       ],
       controllers: [HealthController],
     };

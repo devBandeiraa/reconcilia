@@ -7,6 +7,9 @@ import { z } from 'zod';
  */
 export const SIGNATURE_HEADER = 'x-signature';
 
+/** Segredo padrão SÓ para desenvolvimento local. A api recusa subir com ele em produção. */
+export const DEV_WEBHOOK_SECRET = 'dev-only-webhook-secret-troque-em-producao';
+
 const isoDateTime = z.iso.datetime();
 const cents = z.number().int().nonnegative();
 const reference = z.string().min(1).max(64);
