@@ -11,8 +11,8 @@
     "node": ">=24.11.0 <25"
   },
   "scripts": {
-    "codegen": "pnpm --filter @reconcilia/shared build && pnpm --filter @reconcilia/api db:generate",
-    "dev": "pnpm codegen && pnpm --parallel --filter @reconcilia/shared --filter @reconcilia/api --filter @reconcilia/web run dev",
+    "codegen": "pnpm --filter @reconcilia/shared build && pnpm --filter @reconcilia/simulator build && pnpm --filter @reconcilia/api db:generate",
+    "dev": "pnpm codegen && pnpm --parallel --filter @reconcilia/shared --filter @reconcilia/simulator --filter @reconcilia/api --filter @reconcilia/web run dev",
     "build": "pnpm codegen && pnpm -r run build",
     "lint": "pnpm codegen && eslint .",
     "typecheck": "pnpm codegen && pnpm -r run typecheck",
