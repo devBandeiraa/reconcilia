@@ -3,8 +3,8 @@ import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
   ApiBody,
-  ApiHeader,
   ApiOperation,
+  ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
 import {
@@ -12,24 +12,23 @@ import {
   ErpWebhookSchema,
   type GatewayWebhook,
   GatewayWebhookSchema,
-  SIGNATURE_HEADER,
   type StoreWebhook,
   StoreWebhookSchema,
   type WebhookAck,
   WebhookAckSchema,
 } from '@reconcilia/shared';
 import { toOpenApiSchema } from '../common/openapi.js';
+import { WEBHOOK_SIGNATURE } from '../common/openapi-security.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { WebhooksService } from './webhooks.service.js';
 
 const ACK = { received: true } as const satisfies WebhookAck;
+const RAW_STORAGE =
+  'Grava o evento bruto traduzido para o modelo interno e responde 202. Reenvio do mesmo id é ' +
+  'ignorado pelo banco (id único).';
 
 @ApiTags('webhooks')
-@ApiHeader({
-  name: SIGNATURE_HEADER,
-  description: 'sha256=<hex>: HMAC-SHA256 do corpo bruto com o WEBHOOK_SECRET',
-  required: false,
-})
+@ApiSecurity(WEBHOOK_SIGNATURE)
 @ApiAcceptedResponse({ description: 'Evento recebido', schema: toOpenApiSchema(WebhookAckSchema) })
 @ApiBadRequestResponse({ description: 'Payload fora do contrato' })
 @Controller('webhooks')
@@ -38,7 +37,10 @@ export class WebhooksController {
 
   @Post('store')
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: 'Loja: pedido criado' })
+  @ApiOperation({
+    summary: 'Loja: pedido criado',
+    description: 'Cria o pedido (status PENDING). Reenvio do mesmo externalId é ignorado.',
+  })
   @ApiBody({ schema: toOpenApiSchema(StoreWebhookSchema) })
   async store(
     @Body(new ZodValidationPipe(StoreWebhookSchema)) event: StoreWebhook,
@@ -49,7 +51,10 @@ export class WebhooksController {
 
   @Post('gateway')
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: 'Gateway: cobrança autorizada, capturada ou estornada' })
+  @ApiOperation({
+    summary: 'Gateway: cobrança autorizada, capturada ou estornada',
+    description: RAW_STORAGE,
+  })
   @ApiBody({ schema: toOpenApiSchema(GatewayWebhookSchema) })
   async gateway(
     @Body(new ZodValidationPipe(GatewayWebhookSchema)) event: GatewayWebhook,
@@ -60,7 +65,10 @@ export class WebhooksController {
 
   @Post('erp')
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: 'ERP: pagamento, estorno ou ajuste registrado' })
+  @ApiOperation({
+    summary: 'ERP: pagamento, estorno ou ajuste registrado',
+    description: RAW_STORAGE,
+  })
   @ApiBody({ schema: toOpenApiSchema(ErpWebhookSchema) })
   async erp(@Body(new ZodValidationPipe(ErpWebhookSchema)) event: ErpWebhook): Promise<WebhookAck> {
     await this.webhooks.receiveErp(event);
