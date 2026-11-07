@@ -1,0 +1,14 @@
+{
+  "name": "@reconcilia/simulator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Simulador de loja, gateway e ERP (implementado na fase 3).",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "tsx": "4.23.15"
+  }
+}
