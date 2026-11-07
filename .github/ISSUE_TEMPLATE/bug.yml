@@ -1,0 +1,39 @@
+name: Bug
+description: Algo não funciona como deveria.
+labels: [bug]
+body:
+  - type: textarea
+    id: o-que-aconteceu
+    attributes:
+      label: O que aconteceu
+      description: Descreva o comportamento observado.
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: O que era esperado
+    validations:
+      required: true
+  - type: textarea
+    id: reproduzir
+    attributes:
+      label: Como reproduzir
+      description: 'Passos, comandos e parâmetros do simulador (ex.: --seed 42).'
+      placeholder: |
+        1. docker compose up -d
+        2. pnpm dev
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: versao
+    attributes:
+      label: Versão
+      placeholder: v0.1.0 ou hash do commit
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Sem segredos. Cole as linhas relevantes do pino.
+      render: shell

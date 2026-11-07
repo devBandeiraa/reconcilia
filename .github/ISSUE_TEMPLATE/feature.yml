@@ -1,0 +1,28 @@
+name: Feature
+description: Proposta de funcionalidade ou melhoria.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Problema
+      description: Que dor isso resolve e para quem.
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: Proposta
+      description: Como deveria funcionar.
+    validations:
+      required: true
+  - type: textarea
+    id: aceite
+    attributes:
+      label: Critérios de aceite
+      placeholder: |
+        - [ ] ...
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas consideradas
