@@ -6,6 +6,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiQuery,
+  ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
 import {
@@ -19,6 +20,7 @@ import {
   WebhookAckSchema,
 } from '@reconcilia/shared';
 import { toOpenApiSchema } from '../common/openapi.js';
+import { WEBHOOK_SIGNATURE } from '../common/openapi-security.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { GatewayStatementService } from './gateway-statement.service.js';
 
@@ -30,6 +32,7 @@ export class GatewayStatementController {
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
+  @ApiSecurity(WEBHOOK_SIGNATURE)
   @ApiOperation({
     summary: 'Publica linhas do extrato do gateway simulado',
     description: 'Idempotente por chargeId: reenviar a mesma linha não duplica o extrato.',
