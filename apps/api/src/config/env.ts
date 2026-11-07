@@ -1,9 +1,14 @@
 import { z } from 'zod';
 
+/** Banco do docker-compose (porta 5440 do host). Padrão só para desenvolvimento local. */
+export const LOCAL_DATABASE_URL = 'postgresql://reconcilia:reconcilia@localhost:5440/reconcilia';
+
 export const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  /** Conexão usada pelo app em runtime. Na Neon, a URL do pooler. */
+  DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }).default(LOCAL_DATABASE_URL),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
