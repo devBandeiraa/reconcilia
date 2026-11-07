@@ -16,8 +16,9 @@ Demo ao vivo (em construção) · Vídeo de 1 min (em construção) · Documenta
 
 </div>
 
-> **Status:** v0.1.0. A base do monorepo está pronta (api, web, CI e qualidade). As seções
-> marcadas como _em construção_ chegam nas próximas fases; veja o [roadmap](#roadmap).
+> **Status:** v0.2.0. A base do monorepo e o modelo de dados com garantias no banco estão
+> prontos. As seções marcadas como _em construção_ chegam nas próximas fases; veja o
+> [roadmap](#roadmap).
 
 ## O problema
 
@@ -59,7 +60,11 @@ só é executada depois que uma pessoa aprova.
   [`apps/api/test/env.test.ts`](apps/api/test/env.test.ts).
 - **OpenAPI gerado do Zod**, sem duplicar o tipo em DTOs de classe. Prova:
   [`apps/api/src/common/openapi.ts`](apps/api/src/common/openapi.ts).
-- Idempotência garantida no banco: _em construção (fase 4)_.
+- **Garantias no banco, não só no código.** `event_id` único, um só caso aberto por pedido e
+  tipo (índice único parcial) e CHECKs de valor (o ledger não aceita lançamento de 0 ou
+  negativo). Prova: [`apps/api/test/db/guarantees.test.ts`](apps/api/test/db/guarantees.test.ts),
+  [migration](apps/api/prisma/migrations), [ADR 0002](docs/adr/0002-garantias-no-banco.md).
+- Idempotência da ingestão de webhooks: _em construção (fase 4)_.
 - Ledger em partidas dobradas que sempre fecha em zero: _em construção (fase 5)_.
 - Conciliação validada contra o gabarito do simulador: _em construção (fase 6)_.
 - Agente só de leitura, com no máximo 8 rodadas e saída validada por schema: _em construção
@@ -68,15 +73,15 @@ só é executada depois que uma pessoa aprova.
 
 ## Stack
 
-| Camada       | Escolha                              | Por quê                                                                               | Limite do plano gratuito     |
-| ------------ | ------------------------------------ | ------------------------------------------------------------------------------------- | ---------------------------- |
-| Monorepo     | pnpm workspaces                      | Tipos compartilhados sem publicar pacote ([ADR 0001](docs/adr/0001-monorepo-pnpm.md)) | Sem custo                    |
-| API e worker | NestJS 12 + pino + Swagger           | DI e módulos claros; o worker roda no mesmo processo                                  | Render Free (em construção)  |
-| Web          | Next.js 16 (App Router) + Tailwind 4 | Renderização no servidor, deploy simples                                              | Vercel Hobby (em construção) |
-| Contratos    | Zod 4                                | Um schema gera o tipo, a validação e o OpenAPI                                        | Sem custo                    |
-| Banco        | PostgreSQL 17                        | Garantias no banco (constraints); fila no próprio Postgres                            | Neon (em construção)         |
-| Testes       | Vitest + Supertest                   | Rápidos, com banco real via Docker Compose                                            | Sem custo                    |
-| IA           | Gemini (`@google/genai`)             | Plano gratuito, atrás da interface `LlmClient`                                        | Em construção (fase 7)       |
+| Camada       | Escolha                              | Por quê                                                                                        | Limite do plano gratuito     |
+| ------------ | ------------------------------------ | ---------------------------------------------------------------------------------------------- | ---------------------------- |
+| Monorepo     | pnpm workspaces                      | Tipos compartilhados sem publicar pacote ([ADR 0001](docs/adr/0001-monorepo-pnpm.md))          | Sem custo                    |
+| API e worker | NestJS 12 + pino + Swagger           | DI e módulos claros; o worker roda no mesmo processo                                           | Render Free (em construção)  |
+| Web          | Next.js 16 (App Router) + Tailwind 4 | Renderização no servidor, deploy simples                                                       | Vercel Hobby (em construção) |
+| Contratos    | Zod 4                                | Um schema gera o tipo, a validação e o OpenAPI                                                 | Sem custo                    |
+| Banco        | PostgreSQL 17 + Prisma 7             | Garantias no banco ([ADR 0002](docs/adr/0002-garantias-no-banco.md)); fila no próprio Postgres | Neon (em construção)         |
+| Testes       | Vitest + Supertest                   | Rápidos, com banco real via Docker Compose                                                     | Sem custo                    |
+| IA           | Gemini (`@google/genai`)             | Plano gratuito, atrás da interface `LlmClient`                                                 | Em construção (fase 7)       |
 
 ## Rodando localmente
 
@@ -91,8 +96,13 @@ Depois:
 ```bash
 docker compose up -d
 pnpm install
+pnpm db:reset
 pnpm dev
 ```
+
+`pnpm db:reset` apaga o banco local, aplica todas as migrations do zero e roda o seed (3
+pedidos: um pago, um pendente e um cancelado). Para só aplicar migrations novas sem apagar
+nada, use `pnpm --filter @reconcilia/api db:migrate`.
 
 | Serviço  | Endereço                                                |
 | -------- | ------------------------------------------------------- |
@@ -105,7 +115,7 @@ As variáveis de ambiente têm padrão para desenvolvimento local. Para mudar, c
 [`apps/api/.env.example`](apps/api/.env.example) para `apps/api/.env` e
 [`apps/web/.env.example`](apps/web/.env.example) para `apps/web/.env.local`.
 
-`pnpm db:reset` e o simulador: _em construção (fases 2 e 3)_.
+Simulador: _em construção (fase 3)_.
 
 ## Testes
 
@@ -113,9 +123,16 @@ As variáveis de ambiente têm padrão para desenvolvimento local. Para mudar, c
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-São 4 testes hoje: o contrato do `/health`, o OpenAPI publicado em `/docs` e a validação do env
-(padrões e erro legível). Os testes de banco, idempotência e conciliação chegam nas próximas
-fases.
+São 9 testes hoje, todos contra um PostgreSQL real:
+
+- **Garantias do banco (4):** `eventId` duplicado, dois casos abertos iguais (e o índice
+  parcial deixando passar quando o anterior foi resolvido) e lançamento de ledger com valor 0.
+- **API (2):** o contrato do `/health` e o OpenAPI publicado em `/docs`.
+- **Env (3):** padrões, erro legível e `DATABASE_URL` que não é Postgres.
+
+Os testes usam um banco separado, `reconcilia_test`, que o Vitest cria e migra sozinho, então
+eles nunca apagam o banco de desenvolvimento. Para apontar para outro banco, use
+`TEST_DATABASE_URL`.
 
 ## Arquitetura e decisões
 
@@ -129,11 +146,76 @@ packages/
 docs/adr/      decisões de arquitetura
 ```
 
+### Modelo de dados
+
+```mermaid
+erDiagram
+  ORDERS ||--o{ CASES : "tem"
+  CASES ||--o{ INVESTIGATIONS : "tem"
+  INVESTIGATIONS ||--o{ ACTIONS : "sugere"
+  ORDERS {
+    uuid id PK
+    text external_id UK
+    OrderStatus status
+    int total_cents "CHECK >= 0"
+    int installments "CHECK >= 1"
+  }
+  PAYMENT_EVENTS {
+    uuid id PK
+    text event_id UK
+    text order_external_id
+    PaymentEventType type
+    int amount_cents "CHECK >= 0"
+    int received_count "CHECK >= 1"
+    timestamptz processed_at
+  }
+  ERP_EVENTS {
+    uuid id PK
+    text event_id UK
+    text order_external_id
+    ErpEventType type
+    int amount_cents "CHECK >= 0"
+  }
+  LEDGER_ENTRIES {
+    uuid id PK
+    text transaction_id
+    LedgerAccount account
+    LedgerDirection direction
+    int amount_cents "CHECK > 0"
+  }
+  CASES {
+    uuid id PK
+    uuid order_id FK
+    CaseType type
+    CaseStatus status "1 OPEN por (order_id, type)"
+  }
+  INVESTIGATIONS {
+    uuid id PK
+    uuid case_id FK
+    InvestigationStatus status
+    jsonb steps
+    float confidence "CHECK 0..1"
+  }
+  ACTIONS {
+    uuid id PK
+    uuid investigation_id FK
+    ActionKind kind
+    ActionStatus status
+  }
+```
+
+Os eventos do gateway e do ERP ficam ligados ao pedido por `order_external_id`, sem FK: o evento
+bruto é gravado mesmo que o pedido ainda não exista, e é a conciliação que aponta a divergência.
+Dinheiro sempre em centavos (`int`) e datas sempre em UTC (`timestamptz`).
+
 - [ADR 0001: monorepo com pnpm workspaces](docs/adr/0001-monorepo-pnpm.md)
+- [ADR 0002: garantias no banco](docs/adr/0002-garantias-no-banco.md)
 
 ## Limitações conhecidas
 
-- Ainda não há banco, fila, conciliação nem agente: esta versão é a base do projeto.
+- O modelo de dados existe, mas ainda não há ingestão, fila, conciliação nem agente.
+- O índice único parcial usa o preview feature `partialIndexes` do Prisma 7. Se ele mudar numa
+  versão futura, o índice pode voltar a ser escrito em SQL na migration.
 - O TypeScript está fixado na 6.0 porque `typescript-eslint` e `@nestjs/swagger` ainda não
   aceitam a 7.0.
 
@@ -142,7 +224,7 @@ docs/adr/      decisões de arquitetura
 | Versão | Entrega                                      | Status |
 | ------ | -------------------------------------------- | ------ |
 | v0.1.0 | Monorepo, CI, README inicial                 | ✅     |
-| v0.2.0 | Modelo de dados com garantias no banco       | 🚧     |
+| v0.2.0 | Modelo de dados com garantias no banco       | ✅     |
 | v0.3.0 | Gerador de tráfego e das 3 falhas            | 🚧     |
 | v0.4.0 | Webhooks idempotentes + fila                 | 🚧     |
 | v0.5.0 | Partidas dobradas                            | 🚧     |
