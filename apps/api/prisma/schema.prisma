@@ -1,0 +1,190 @@
+// Modelo de dados do Reconcilia.
+// Regras: dinheiro em centavos (Int), datas em UTC (timestamptz), garantias no banco.
+// CHECKs não existem no schema do Prisma: ficam em SQL na migration (ver ADR 0002).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+  previewFeatures     = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELED
+}
+
+enum PaymentEventType {
+  AUTHORIZED
+  CAPTURED
+  REFUNDED
+}
+
+enum ErpEventType {
+  PAYMENT_RECORDED
+  REFUND_RECORDED
+  ADJUSTMENT
+}
+
+enum LedgerAccount {
+  GATEWAY_RECEIVABLE
+  ORDER_REVENUE
+  REFUNDS
+  ERP_ADJUSTMENTS
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+enum CaseType {
+  PAYMENT_WITHOUT_ORDER
+  DUPLICATE_WEBHOOK
+  AMOUNT_MISMATCH
+}
+
+enum CaseStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum InvestigationStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum ActionKind {
+  REPROCESS_WEBHOOK
+  MARK_ORDER_PAID
+  FLAG_ERP_DIVERGENCE
+  IGNORE_DUPLICATE
+}
+
+enum ActionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXECUTED
+}
+
+/// Pedido da loja. CHECK: total_cents >= 0, installments >= 1.
+model Order {
+  id           String      @id @default(uuid(7)) @db.Uuid
+  externalId   String      @unique @map("external_id")
+  status       OrderStatus @default(PENDING)
+  totalCents   Int         @map("total_cents")
+  installments Int         @default(1)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  cases        Case[]
+
+  @@map("orders")
+}
+
+/// Webhook bruto do gateway. event_id único é a garantia de idempotência da ingestão.
+/// Sem FK para orders: o evento é gravado mesmo se o pedido ainda não existir.
+/// CHECK: amount_cents >= 0, received_count >= 1.
+model PaymentEvent {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  provider        String
+  eventId         String           @unique @map("event_id")
+  orderExternalId String           @map("order_external_id")
+  type            PaymentEventType
+  amountCents     Int              @map("amount_cents")
+  payload         Json
+  receivedCount   Int              @default(1) @map("received_count")
+  receivedAt      DateTime         @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt     DateTime?        @map("processed_at") @db.Timestamptz(3)
+
+  @@index([orderExternalId])
+  @@map("payment_events")
+}
+
+/// Evento bruto do ERP, com a mesma garantia de idempotência dos webhooks do gateway.
+/// CHECK: amount_cents >= 0, received_count >= 1.
+model ErpEvent {
+  id              String       @id @default(uuid(7)) @db.Uuid
+  eventId         String       @unique @map("event_id")
+  orderExternalId String       @map("order_external_id")
+  type            ErpEventType
+  amountCents     Int          @map("amount_cents")
+  payload         Json
+  receivedCount   Int          @default(1) @map("received_count")
+  receivedAt      DateTime     @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  @@index([orderExternalId])
+  @@map("erp_events")
+}
+
+/// Lançamento do ledger em partidas dobradas. CHECK: amount_cents > 0.
+model LedgerEntry {
+  id            String          @id @default(uuid(7)) @db.Uuid
+  transactionId String          @map("transaction_id")
+  account       LedgerAccount
+  direction     LedgerDirection
+  amountCents   Int             @map("amount_cents")
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([transactionId])
+  @@map("ledger_entries")
+}
+
+/// Divergência detectada pela conciliação. Só pode haver um caso OPEN por (pedido, tipo).
+model Case {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  orderId        String          @map("order_id") @db.Uuid
+  order          Order           @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  type           CaseType
+  status         CaseStatus      @default(OPEN)
+  detectedAt     DateTime        @default(now()) @map("detected_at") @db.Timestamptz(3)
+  resolvedAt     DateTime?       @map("resolved_at") @db.Timestamptz(3)
+  investigations Investigation[]
+
+  @@unique([orderId, type], where: { status: "OPEN" }, map: "cases_one_open_per_order_type")
+  @@index([orderId])
+  @@index([status, type])
+  @@map("cases")
+}
+
+/// Investigação do agente de IA. CHECK: confidence nulo ou entre 0 e 1.
+model Investigation {
+  id              String              @id @default(uuid(7)) @db.Uuid
+  caseId          String              @map("case_id") @db.Uuid
+  case            Case                @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  status          InvestigationStatus @default(QUEUED)
+  steps           Json                @default("[]")
+  diagnosis       String?
+  suggestedAction Json?               @map("suggested_action")
+  confidence      Float?
+  failureReason   String?             @map("failure_reason")
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  actions         Action[]
+
+  @@index([caseId])
+  @@map("investigations")
+}
+
+/// Ação sugerida pelo agente. Só é executada pelo backend após aprovação humana.
+model Action {
+  id              String        @id @default(uuid(7)) @db.Uuid
+  investigationId String        @map("investigation_id") @db.Uuid
+  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Restrict)
+  kind            ActionKind
+  params          Json
+  status          ActionStatus  @default(PENDING)
+  decidedAt       DateTime?     @map("decided_at") @db.Timestamptz(3)
+  executedAt      DateTime?     @map("executed_at") @db.Timestamptz(3)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([investigationId])
+  @@map("actions")
+}
