@@ -7,5 +7,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts'],
+    globalSetup: ['test/support/global-setup.ts'],
+    // Os testes de banco compartilham o reconcilia_test e esvaziam as tabelas: um arquivo por vez.
+    fileParallelism: false,
   },
 });

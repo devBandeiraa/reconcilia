@@ -5,13 +5,16 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { loadEnv } from '../src/config/env.js';
+import { TEST_DATABASE_URL } from './support/test-db.js';
 
 describe('GET /health', () => {
   let app: INestApplication;
   let server: Server;
 
   beforeAll(async () => {
-    app = await createApp(loadEnv({ NODE_ENV: 'test', LOG_LEVEL: 'silent' }));
+    app = await createApp(
+      loadEnv({ NODE_ENV: 'test', LOG_LEVEL: 'silent', DATABASE_URL: TEST_DATABASE_URL }),
+    );
     await app.init();
     server = app.getHttpServer() as Server;
   });
