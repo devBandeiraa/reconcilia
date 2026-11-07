@@ -1,5 +1,6 @@
 import { type DynamicModule, Module } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
+import { ConfigModule } from './config/config.module.js';
 import type { Env } from './config/env.js';
 import { HealthController } from './health/health.controller.js';
 import { PrismaModule } from './prisma/prisma.module.js';
@@ -12,6 +13,7 @@ export class AppModule {
     return {
       module: AppModule,
       imports: [
+        ConfigModule.forRoot(env),
         LoggerModule.forRoot({
           pinoHttp: {
             level: env.LOG_LEVEL,

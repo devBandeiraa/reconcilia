@@ -226,6 +226,9 @@ importers:
       '@reconcilia/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@reconcilia/simulator':
+        specifier: workspace:*
+        version: link:../simulator
       nestjs-pino:
         specifier: 5.3.1
         version: 5.3.1(@nestjs/common@12.4.0(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.4.0)(pino-http@11.0.0)(pino@10.4.0)(rxjs@7.8.2)
