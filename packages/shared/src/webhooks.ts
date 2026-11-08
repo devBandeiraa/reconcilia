@@ -69,6 +69,33 @@ export const ErpWebhookSchema = z.object({
 });
 export type ErpWebhook = z.infer<typeof ErpWebhookSchema>;
 
-/** Resposta dos webhooks. */
-export const WebhookAckSchema = z.object({ received: z.literal(true) });
+/**
+ * Resposta dos webhooks. Evento novo: 202 com `duplicate: false`. Evento já recebido (mesmo id):
+ * 200 com `duplicate: true`, sem efeito além de contar o reenvio.
+ */
+export const WebhookAckSchema = z.object({
+  received: z.literal(true),
+  duplicate: z.boolean(),
+});
 export type WebhookAck = z.infer<typeof WebhookAckSchema>;
+
+/** Resposta do upload do extrato simulado. */
+export const StatementAckSchema = z.object({ received: z.literal(true) });
+export type StatementAck = z.infer<typeof StatementAckSchema>;
+
+/** Job da dead letter queue: evento que esgotou as tentativas de aplicação. */
+export const DeadLetterJobSchema = z.object({
+  jobId: z.string(),
+  eventId: z.string(),
+  orderExternalId: z.string(),
+  retryCount: z.number().int(),
+  createdOn: isoDateTime,
+  error: z.string().nullable(),
+});
+export type DeadLetterJob = z.infer<typeof DeadLetterJobSchema>;
+
+export const DeadLetterPageSchema = z.object({
+  data: z.array(DeadLetterJobSchema),
+  limit: z.number().int(),
+});
+export type DeadLetterPage = z.infer<typeof DeadLetterPageSchema>;
