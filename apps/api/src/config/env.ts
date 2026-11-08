@@ -15,6 +15,12 @@ export const EnvSchema = z
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }).default(LOCAL_DATABASE_URL),
     /** Segredo do HMAC dos webhooks (loja, gateway, ERP e extrato simulado). */
     WEBHOOK_SECRET: z.string().min(16).default(DEV_WEBHOOK_SECRET),
+    /** Tentativas extras de um evento antes de ir para a DLQ. */
+    QUEUE_RETRY_LIMIT: z.coerce.number().int().min(0).max(10).default(5),
+    /** Atraso base do retry; cresce em backoff exponencial (teto de 300s). */
+    QUEUE_RETRY_DELAY_SECONDS: z.coerce.number().int().min(1).max(60).default(2),
+    /** Intervalo de polling do worker. */
+    QUEUE_POLLING_SECONDS: z.coerce.number().min(0.5).max(60).default(2),
   })
   .superRefine((env, ctx) => {
     if (
