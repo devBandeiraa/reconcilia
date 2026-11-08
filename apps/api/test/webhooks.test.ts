@@ -4,10 +4,10 @@ import { GatewayStatementPageSchema } from '@reconcilia/shared';
 import { buildMessages, generateScenario, PATHS } from '@reconcilia/simulator';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createTestApp } from './support/test-app.js';
+import { createTestApp, signedPost } from './support/test-app.js';
 import { createTestPrisma, truncateAll } from './support/test-db.js';
 
-// Até a v0.4.0 os webhooks só gravam o bruto e respondem 202; reenvio é ignorado.
+// Webhooks assinados: evento novo → 202; reenvio do mesmo id → 200 com duplicate=true.
 const prisma = createTestPrisma();
 let app: INestApplication;
 let server: Server;
@@ -29,15 +29,12 @@ beforeEach(async () => {
   await truncateAll(prisma);
 });
 
-const post = (path: string, body: unknown) =>
-  request(server)
-    .post(path)
-    .send(body as object);
+const post = (path: string, body: unknown) => signedPost(server, path, body);
 
 describe('webhooks', () => {
   it('loja: cria o pedido e um reenvio não duplica', async () => {
-    await post(PATHS.store, messages.store).expect(202, { received: true });
-    await post(PATHS.store, messages.store).expect(202);
+    await post(PATHS.store, messages.store).expect(202, { received: true, duplicate: false });
+    await post(PATHS.store, messages.store).expect(200, { received: true, duplicate: true });
 
     const orders = await prisma.order.findMany();
     expect(orders).toHaveLength(1);
@@ -51,7 +48,7 @@ describe('webhooks', () => {
 
   it('gateway: grava o evento traduzido para o modelo interno e um reenvio não duplica', async () => {
     await post(PATHS.gateway, messages.captured).expect(202);
-    await post(PATHS.gateway, messages.captured).expect(202);
+    await post(PATHS.gateway, messages.captured).expect(200);
 
     const events = await prisma.paymentEvent.findMany();
     expect(events).toHaveLength(1);
@@ -62,7 +59,7 @@ describe('webhooks', () => {
       orderExternalId: order.externalId,
       amountCents: order.totalCents,
       payload: messages.captured,
-      processedAt: null,
+      receivedCount: 2,
     });
   });
 
