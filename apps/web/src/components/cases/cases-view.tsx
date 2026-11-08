@@ -55,12 +55,14 @@ function useCount(type: CaseType | null, status: CaseStatus, version: number) {
 
 function CounterCard({
   label,
+  hint,
   value,
   accent,
   pressed,
   onClick,
 }: {
   label: string;
+  hint: string;
   value: number | undefined;
   accent: string;
   pressed: boolean;
@@ -72,13 +74,14 @@ function CounterCard({
       onClick={onClick}
       aria-pressed={pressed}
       className={cn(
-        'bg-card hover:bg-muted/50 focus-visible:ring-ring rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none',
+        'bg-card hover:bg-muted/50 focus-visible:ring-ring flex flex-col justify-between rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none',
         pressed && 'ring-ring ring-2',
       )}
     >
       <span className="text-muted-foreground text-sm">{label}</span>
-      <span className={cn('mt-1 block text-3xl font-semibold tabular-nums', accent)}>
-        {value ?? '–'}
+      <span className="mt-1 flex items-baseline gap-2">
+        <span className={cn('text-3xl font-semibold tabular-nums', accent)}>{value ?? '–'}</span>
+        <span className="text-muted-foreground text-xs">{hint}</span>
       </span>
     </button>
   );
@@ -259,7 +262,8 @@ export function CasesView() {
         {CASE_TYPES.map((t) => (
           <CounterCard
             key={t}
-            label={`${CASE_TYPE_LABEL[t]} · abertos`}
+            label={CASE_TYPE_LABEL[t]}
+            hint="abertos"
             value={counts[t]}
             accent={CASE_TYPE_ACCENT[t]}
             pressed={type === t && status === 'OPEN'}
@@ -268,6 +272,7 @@ export function CasesView() {
         ))}
         <CounterCard
           label="Resolvidos"
+          hint="no total"
           value={resolved}
           accent="text-emerald-300"
           pressed={type === 'ALL' && status === 'RESOLVED'}
