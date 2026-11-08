@@ -14,6 +14,10 @@ import { createTestPrisma, truncateAll } from './support/test-db.js';
 class CountingLedger implements LedgerPort {
   attempts = 0;
   failuresLeft = 0;
+  recordRefund(): Promise<void> {
+    return Promise.resolve();
+  }
+
   recordCapture(): Promise<void> {
     this.attempts++;
     if (this.failuresLeft > 0) {

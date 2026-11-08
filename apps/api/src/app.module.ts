@@ -3,6 +3,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { ConfigModule } from './config/config.module.js';
 import type { Env } from './config/env.js';
 import { HealthController } from './health/health.controller.js';
+import { LedgerModule } from './ledger/ledger.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { QueueModule } from './queue/queue.module.js';
@@ -27,6 +28,7 @@ export class AppModule {
         }),
         PrismaModule.forRoot(env.DATABASE_URL),
         QueueModule,
+        LedgerModule,
         WebhooksModule,
         PaymentsModule,
         SimulationModule,

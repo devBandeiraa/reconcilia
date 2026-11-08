@@ -125,14 +125,27 @@ model ErpEvent {
   @@map("erp_events")
 }
 
-/// Lançamento do ledger em partidas dobradas. CHECK: amount_cents > 0.
+/// Cabeçalho de uma transação do ledger. transaction_id é a PK: postar duas vezes a mesma
+/// transação é barrado pelo banco (derivado do eventId: "capture:<eventId>").
+model LedgerTransaction {
+  id          String        @id @map("transaction_id")
+  description String
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  entries     LedgerEntry[]
+
+  @@map("ledger_transactions")
+}
+
+/// Lançamento do ledger em partidas dobradas. CHECK: amount_cents > 0 (a direção dá o sinal).
+/// Triggers (migration): soma zero por transaction_id no COMMIT e tabela append-only.
 model LedgerEntry {
-  id            String          @id @default(uuid(7)) @db.Uuid
-  transactionId String          @map("transaction_id")
+  id            String            @id @default(uuid(7)) @db.Uuid
+  transactionId String            @map("transaction_id")
+  transaction   LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
   account       LedgerAccount
   direction     LedgerDirection
-  amountCents   Int             @map("amount_cents")
-  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  amountCents   Int               @map("amount_cents")
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@index([transactionId])
   @@map("ledger_entries")
