@@ -43,6 +43,21 @@ function toSummary(row: CaseWithOrder): CaseSummary {
   };
 }
 
+const AUDIT_VERBS: Record<string, string> = {
+  APPROVED: 'aprovou',
+  REJECTED: 'recusou',
+  EXECUTED: 'backend executou',
+  EXECUTION_FAILED: 'execução falhou',
+};
+
+function describeAudit(event: string, actor: string, kind: string, details: unknown): string {
+  const extra =
+    event === 'EXECUTION_FAILED' ? `: ${String((details as { error?: unknown }).error)}` : '';
+  return event === 'EXECUTED' || event === 'EXECUTION_FAILED'
+    ? `${AUDIT_VERBS[event]} ${kind} (aprovada por ${actor})${extra}`
+    : `${actor} ${AUDIT_VERBS[event]} ${kind}`;
+}
+
 const SOURCE_ORDER = { STORE: 0, GATEWAY: 1, GATEWAY_STATEMENT: 2, ERP: 3 } as const;
 
 /** Leitura dos casos para a api e a interface. Nada aqui escreve no banco. */
@@ -79,7 +94,7 @@ export class CasesService {
     if (!row) throw new NotFoundException(`Caso ${id} não encontrado`);
 
     const ref = row.order.externalId;
-    const [paymentEvents, erpEvents, captures, investigations] = await Promise.all([
+    const [paymentEvents, erpEvents, captures, investigations, audit] = await Promise.all([
       this.prisma.paymentEvent.findMany({ where: { orderExternalId: ref } }),
       this.prisma.erpEvent.findMany({ where: { orderExternalId: ref } }),
       this.statement.listCaptures(ref),
@@ -87,6 +102,11 @@ export class CasesService {
         where: { caseId: id },
         orderBy: { createdAt: 'asc' },
         select: { createdAt: true, status: true, suggestedAction: true, failureReason: true },
+      }),
+      this.prisma.auditEntry.findMany({
+        where: { caseId: id },
+        orderBy: { at: 'asc' },
+        include: { action: { select: { kind: true } } },
       }),
     ]);
 
@@ -155,6 +175,13 @@ export class CasesService {
         description: `Investigação do agente ${investigation.status}${detail}`,
       });
     }
+    for (const entry of audit) {
+      history.push({
+        at: entry.at.toISOString(),
+        kind: entry.event,
+        description: describeAudit(entry.event, entry.actor, entry.action.kind, entry.details),
+      });
+    }
     if (row.resolvedAt && row.status !== 'OPEN') {
       history.push({
         at: row.resolvedAt.toISOString(),
@@ -162,6 +189,8 @@ export class CasesService {
         description: row.status === 'RESOLVED' ? 'Resolvido' : 'Descartado',
       });
     }
+
+    history.sort((x, y) => x.at.localeCompare(y.at));
 
     return {
       case: toSummary(row),

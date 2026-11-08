@@ -16,10 +16,9 @@ Demo ao vivo (em construção) · Vídeo de 1 min (em construção) · Documenta
 
 </div>
 
-> **Status:** v0.7.0. Base do monorepo, modelo de dados com garantias no banco, simulador das
-> 3 falhas, ingestão idempotente de webhooks com fila, ledger em partidas dobradas, conciliação
-> validada contra o gabarito e agente de IA investigador estão prontos. As seções marcadas como
-> _em construção_ chegam nas próximas fases; veja o [roadmap](#roadmap).
+> **Status:** v0.8.0. O backend está completo: simulador, ingestão idempotente, ledger,
+> conciliação, agente de IA e aprovação humana com execução idempotente e auditoria. Faltam as
+> telas (fase 9) e o deploy (fase 10); veja o [roadmap](#roadmap).
 
 ## O problema
 
@@ -93,7 +92,11 @@ só é executada depois que uma pessoa aprova.
   Prova: [`apps/api/test/agent.test.ts`](apps/api/test/agent.test.ts),
   [seção Agente de IA](#agente-de-ia), [ADR 0007](docs/adr/0007-agente-somente-leitura.md).
 
-- Aprovação humana com execução idempotente e trilha de auditoria: _em construção (fase 8)_.
+- **Aprovação humana com execução idempotente e trilha de auditoria.** A IA só sugere; uma
+  pessoa aprova; o backend executa **uma única vez**, mesmo com duas aprovações ao mesmo tempo.
+  Tudo vai para uma trilha de auditoria append-only. Prova:
+  [`apps/api/test/actions.test.ts`](apps/api/test/actions.test.ts),
+  [seção Aprovação humana](#aprovação-humana), [ADR 0008](docs/adr/0008-aprovacao-e-auditoria.md).
 
 ## Stack
 
@@ -337,7 +340,8 @@ seed 5005: gabarito 47 linhas, casos abertos 47 → idênticos
 ## Agente de IA
 
 Cada caso pode ser investigado por um agente que **lê** os dados dos três lados e **recomenda**
-uma ação. Ele não executa nada: a ação fica `PENDING` até uma pessoa aprovar (fase 8).
+uma ação. Ele não executa nada: a ação fica `PENDING` até uma pessoa aprovar (veja
+[Aprovação humana](#aprovação-humana)).
 
 ```bash
 curl -X POST localhost:3001/cases/<id>/investigate   # 202 {investigationId, status: QUEUED}
@@ -404,14 +408,81 @@ Os outros dois tipos também terminaram certos com o Gemini:
 - `PAYMENT_WITHOUT_ORDER` → `MARK_ORDER_PAID`, em 23s.
 - `AMOUNT_MISMATCH` → `FLAG_ERP_DIVERGENCE` (20960 contra 22213), em 42s.
 
+## Aprovação humana
+
+A ação sugerida pelo agente só é executada depois que uma pessoa aprova. Quem executa é o
+backend, nunca o modelo.
+
+```bash
+curl -X POST localhost:3001/actions/<id>/approve -H 'content-type: application/json' \
+  -d '{"decidedBy": "Ana"}'
+curl -X POST localhost:3001/actions/<id>/reject -H 'content-type: application/json' \
+  -d '{"decidedBy": "Ana", "reason": "quero conferir com o gateway"}'
+curl localhost:3001/actions/<id>   # decisão, resultado da execução e trilha de auditoria
+```
+
+| Ação                  | O que o backend executa ao aprovar                                                                             |
+| --------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `MARK_ORDER_PAID`     | Pedido `PENDING → PAID` e captura no ledger com `capture:<eventId do extrato>`, o mesmo id que o worker usaria |
+| `REPROCESS_WEBHOOK`   | Reenfileira o evento original se ele ainda não foi aplicado (o worker aplica uma vez)                          |
+| `FLAG_ERP_DIVERGENCE` | Pede o ajuste ao ERP (aqui, o ERP simulado), uma vez por ação                                                  |
+| `IGNORE_DUPLICATE`    | Só encerra o caso                                                                                              |
+
+O pedido sempre sai do caso, nunca dos `params`. Executada a ação, o caso fica `RESOLVED`. Se
+for recusada, o caso continua `OPEN` e pode ser investigado de novo.
+
+**Execução exatamente uma vez:**
+
+1. **Aprovar:** é um `UPDATE actions SET status = 'APPROVED' ... WHERE status = 'PENDING'`
+   condicional.
+2. **Executar:** acontece numa transação que começa com
+   `UPDATE actions SET status = 'EXECUTED' WHERE id = $1 AND status = 'APPROVED'`. Com 0 linhas,
+   outra chamada já executou, e esta sai sem efeito. O efeito, o caso `RESOLVED` e a linha da
+   auditoria entram no **mesmo COMMIT**.
+3. **Se o efeito falhar:** por exemplo, se o `chargeId` saiu do extrato, a transação volta. Nada é
+   gravado, a ação segue `APPROVED`, a falha vai para a auditoria e a resposta é **422**. Aprovar
+   de novo tenta outra vez.
+4. **Webhook atrasado:** o `MARK_ORDER_PAID` usa o mesmo `transactionId` do worker. Se o webhook
+   perdido chegar depois, o ledger devolve `already-posted`, e não há lançamento em dobro.
+
+**Trilha de auditoria (`audit_log`):** registra `APPROVED`, `REJECTED`, `EXECUTED` e
+`EXECUTION_FAILED`, com quem, quando e os detalhes. Um trigger torna a tabela **append-only**, e
+o histórico do `GET /cases/:id` mostra tudo. A conciliação **não reabre** um caso que uma pessoa
+resolveu ou descartou.
+
+Com a api no ar, aprovei as três ações que o Gemini real tinha sugerido:
+
+```
+FLAG_ERP_DIVERGENCE (S5005-0009) → EXECUTED, caso RESOLVED, ajuste de 1253 pedido ao ERP
+MARK_ORDER_PAID     (S5005-0006) → EXECUTED, caso RESOLVED, pedido PENDING → PAID, ledger posted
+IGNORE_DUPLICATE    (S5005-0002) → EXECUTED, caso RESOLVED
+ledger: total 0 | conciliação seguinte: 0 abertos, alreadyResolved 2
+
+Histórico do caso S5005-0006:
+  DETECTED       Detectado pela conciliação
+  INVESTIGATION  Investigação do agente DONE: sugeriu MARK_ORDER_PAID
+  APPROVED       Jhordan Bandeira aprovou MARK_ORDER_PAID
+  EXECUTED       backend executou MARK_ORDER_PAID (aprovada por Jhordan Bandeira)
+  RESOLVED       Resolvido
+```
+
 ## Testes
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-São 79 testes hoje. Os 63 da api rodam contra um PostgreSQL real, e **nenhum chama o modelo
+São 92 testes hoje. Os 76 da api rodam contra um PostgreSQL real, e **nenhum chama o modelo
 real**: o `LlmClient` é trocado por roteiros (`FakeLlmClient`).
+
+- **Aprovação humana (13):**
+  - **Aprovar duas vezes em paralelo executa uma vez só:** um `APPROVED` e um `EXECUTED` na
+    auditoria, e 2 lançamentos no ledger, não 4.
+  - **Recusar não altera pedido nem ledger:** comparado por md5.
+  - **O efeito de cada ação:** inclusive o webhook perdido que chega depois sem lançar em dobro.
+  - **A conciliação não reabre casos resolvidos.**
+  - **Erros:** 422 sem mudar nada, além de 404 e 400.
+  - **Auditoria:** append-only, e o ledger segue somando zero.
 
 - **Agente (16):**
   - Cada tipo de caso termina `DONE` com a ação esperada.
@@ -547,18 +618,19 @@ sistema externo e não faz parte do modelo do Reconcilia.
 - [ADR 0005: ledger em partidas dobradas](docs/adr/0005-ledger-partidas-dobradas.md)
 - [ADR 0006: conciliação](docs/adr/0006-conciliacao.md)
 - [ADR 0007: agente somente leitura](docs/adr/0007-agente-somente-leitura.md)
+- [ADR 0008: aprovação e auditoria](docs/adr/0008-aprovacao-e-auditoria.md)
 
 ## Limitações conhecidas
 
-- Ainda não há aprovação nem execução: as ações sugeridas pelo agente ficam `PENDING`.
+- Não há login: quem aprova ou recusa se identifica no corpo da requisição (`decidedBy`). A
+  trilha de auditoria registra o nome informado, não uma identidade verificada.
+- O ajuste de divergência vai para um ERP simulado (`sim_erp_adjustments`). Num ERP real, seria a
+  API dele, com o `actionId` como chave de idempotência.
 - O plano gratuito do Gemini tem cota baixa e instabilidade. No aceite, o `gemini-3.8-flash`
   respondeu 503 e 504, e a cota por minuto acabou depois de poucas investigações. Por isso o
   padrão é o modo demonstração e o modelo padrão é o `gemini-3.5-flash`, que foi o que respondeu
   de forma estável.
 - Os roteiros do modo demonstração foram escritos à mão, no formato de uma investigação real.
-- Hoje um caso resolvido pode ser reaberto pela próxima conciliação, se a divergência continuar
-  no dado (por exemplo, `received_count > 1` não volta a 1). Como a resolução só chega na fase 8,
-  a regra de não reabrir entra junto com ela.
 - O ledger registra só o lado do gateway (captura e estorno). Liquidação (o dinheiro saindo do
   gateway para a conta da loja), taxas e os ajustes do ERP ficam fora por enquanto.
 - Pedidos marcados como pagos antes da v0.5.0 não têm lançamento: o ledger começou a registrar
@@ -585,7 +657,7 @@ sistema externo e não faz parte do modelo do Reconcilia.
 | v0.5.0 | Partidas dobradas                            | ✅     |
 | v0.6.0 | Detecção de divergências                     | ✅     |
 | v0.7.0 | Agente de IA investigador                    | ✅     |
-| v0.8.0 | Aprovação humana e execução                  | 🚧     |
+| v0.8.0 | Aprovação humana e execução                  | ✅     |
 | v0.9.0 | Telas em Next.js                             | 🚧     |
 | v1.0.0 | No ar + README final                         | 🚧     |
 | v1.1.0 | RAG com casos parecidos e runbook (opcional) | 🚧     |

@@ -7,6 +7,8 @@ export const TEST_DATABASE_URL =
   'postgresql://reconcilia:reconcilia@localhost:5440/reconcilia_test';
 
 const TABLES = [
+  'audit_log',
+  'sim_erp_adjustments',
   'actions',
   'investigations',
   'cases',

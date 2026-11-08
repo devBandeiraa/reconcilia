@@ -47,7 +47,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await prisma.$executeRawUnsafe('TRUNCATE "actions", "investigations"');
+  await prisma.$executeRawUnsafe('TRUNCATE "audit_log", "actions", "investigations"');
   llm.impl = null;
 });
 

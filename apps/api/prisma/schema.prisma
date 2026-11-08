@@ -77,6 +77,13 @@ enum ActionStatus {
   EXECUTED
 }
 
+enum AuditEvent {
+  APPROVED
+  REJECTED
+  EXECUTED
+  EXECUTION_FAILED
+}
+
 /// Pedido da loja. CHECK: total_cents >= 0, installments >= 1.
 model Order {
   id           String      @id @default(uuid(7)) @db.Uuid
@@ -161,6 +168,7 @@ model Case {
   detectedAt     DateTime        @default(now()) @map("detected_at") @db.Timestamptz(3)
   resolvedAt     DateTime?       @map("resolved_at") @db.Timestamptz(3)
   investigations Investigation[]
+  auditEntries   AuditEntry[]
 
   @@unique([orderId, type], where: { status: "OPEN" }, map: "cases_one_open_per_order_type")
   @@index([orderId])
@@ -200,11 +208,50 @@ model Action {
   params          Json
   status          ActionStatus  @default(PENDING)
   decidedAt       DateTime?     @map("decided_at") @db.Timestamptz(3)
+  /// Quem aprovou ou recusou (até haver login, informado na requisição).
+  decidedBy       String?       @map("decided_by")
+  rejectionReason String?       @map("rejection_reason")
+  /// O que a execução fez (ou já encontrou feito).
+  executionResult Json?         @map("execution_result")
   executedAt      DateTime?     @map("executed_at") @db.Timestamptz(3)
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  auditEntries    AuditEntry[]
 
   @@index([investigationId])
   @@map("actions")
+}
+
+/// Trilha de auditoria das decisões humanas e das execuções. Append-only (trigger na migration).
+model AuditEntry {
+  id       String     @id @default(uuid(7)) @db.Uuid
+  actionId String     @map("action_id") @db.Uuid
+  action   Action     @relation(fields: [actionId], references: [id], onDelete: Restrict)
+  caseId   String     @map("case_id") @db.Uuid
+  case     Case       @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  event    AuditEvent
+  actor    String
+  details  Json       @default("{}")
+  at       DateTime   @default(now()) @db.Timestamptz(3)
+
+  @@index([caseId])
+  @@index([actionId])
+  @@map("audit_log")
+}
+
+/// Caixa de entrada do ERP SIMULADO: pedidos de ajuste enviados pelo Reconcilia (sistema externo).
+/// action_id único: aprovar de novo não manda o ajuste duas vezes. CHECK: valores >= 0.
+model SimErpAdjustment {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  actionId        String   @unique @map("action_id") @db.Uuid
+  orderExternalId String   @map("order_external_id")
+  expectedCents   Int      @map("expected_cents")
+  erpCents        Int      @map("erp_cents")
+  /// erp_cents - expected_cents (com sinal: positivo = o ERP registrou a mais).
+  differenceCents Int      @map("difference_cents")
+  requestedAt     DateTime @default(now()) @map("requested_at") @db.Timestamptz(3)
+
+  @@index([orderExternalId])
+  @@map("sim_erp_adjustments")
 }
 
 /// Extrato do gateway SIMULADO: representa um sistema externo, não dados do Reconcilia.

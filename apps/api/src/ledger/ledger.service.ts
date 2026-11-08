@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { LEDGER_ACCOUNTS, type LedgerBalance } from '@reconcilia/shared';
 import { LedgerAccount, LedgerDirection, type Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import type { LedgerPort, MoneyMovement } from './ledger.port.js';
+import type { LedgerOutcome, LedgerPort, MoneyMovement } from './ledger.port.js';
 
 export interface PostingLine {
   account: LedgerAccount;
@@ -74,9 +74,12 @@ export class LedgerService implements LedgerPort {
   }
 
   /** Captura: o gateway passa a nos dever o valor. Débito a receber / crédito receita. */
-  async recordCapture(tx: Prisma.TransactionClient, movement: MoneyMovement): Promise<void> {
-    if (movement.amountCents === 0) return;
-    await this.post(
+  async recordCapture(
+    tx: Prisma.TransactionClient,
+    movement: MoneyMovement,
+  ): Promise<LedgerOutcome> {
+    if (movement.amountCents === 0) return 'skipped';
+    return this.post(
       tx,
       movement.transactionId,
       [
@@ -96,9 +99,12 @@ export class LedgerService implements LedgerPort {
   }
 
   /** Estorno: reduz a receita (REFUNDS é redutora) e o que o gateway nos deve. */
-  async recordRefund(tx: Prisma.TransactionClient, movement: MoneyMovement): Promise<void> {
-    if (movement.amountCents === 0) return;
-    await this.post(
+  async recordRefund(
+    tx: Prisma.TransactionClient,
+    movement: MoneyMovement,
+  ): Promise<LedgerOutcome> {
+    if (movement.amountCents === 0) return 'skipped';
+    return this.post(
       tx,
       movement.transactionId,
       [

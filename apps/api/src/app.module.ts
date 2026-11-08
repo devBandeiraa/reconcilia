@@ -1,5 +1,6 @@
 import { type DynamicModule, Module } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
+import { ActionsModule } from './actions/actions.module.js';
 import { AgentModule } from './agent/agent.module.js';
 import { ConfigModule } from './config/config.module.js';
 import type { Env } from './config/env.js';
@@ -35,6 +36,7 @@ export class AppModule {
         PaymentsModule,
         ReconciliationModule,
         AgentModule,
+        ActionsModule,
         SimulationModule,
       ],
       controllers: [HealthController],
