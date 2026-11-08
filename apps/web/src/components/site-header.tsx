@@ -14,7 +14,7 @@ const LINKS = [
 function ApiStatus() {
   const health = useApi('/health', HealthResponseSchema, { pollMs: 30_000 });
   const [label, dot] = health.data
-    ? [`API no ar · v${health.data.version}`, 'bg-emerald-400']
+    ? ['API no ar', 'bg-emerald-400']
     : health.waking
       ? ['API acordando…', 'bg-amber-400 animate-pulse motion-reduce:animate-none']
       : health.error
@@ -24,6 +24,7 @@ function ApiStatus() {
     <span className="text-muted-foreground flex items-center gap-2 text-xs" role="status">
       <span aria-hidden="true" className={cn('size-2 rounded-full', dot)} />
       {label}
+      {health.data && <span className="hidden sm:inline">· v{health.data.version}</span>}
     </span>
   );
 }
@@ -32,7 +33,7 @@ export function SiteHeader() {
   const pathname = usePathname();
   return (
     <header className="border-b">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
+      <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:gap-6">
         <Link href="/casos" className="font-semibold tracking-tight">
           Reconcilia
         </Link>
