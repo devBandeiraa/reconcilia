@@ -7,14 +7,22 @@ import request from 'supertest';
 import { APP_OPTIONS, setupApp } from '../../src/app.js';
 import { AppModule } from '../../src/app.module.js';
 import { loadEnv } from '../../src/config/env.js';
+import { LLM_CLIENT, type LlmClient } from '../../src/agent/llm/llm-client.js';
 import { LEDGER, type LedgerPort } from '../../src/ledger/ledger.port.js';
-import { PAYMENT_EVENTS_DLQ, PAYMENT_EVENTS_QUEUE } from '../../src/queue/queue.constants.js';
+import {
+  INVESTIGATIONS_QUEUE,
+  PAYMENT_EVENTS_DLQ,
+  PAYMENT_EVENTS_QUEUE,
+  RECONCILIATION_QUEUE,
+} from '../../src/queue/queue.constants.js';
 import { QueueService } from '../../src/queue/queue.service.js';
 import { TEST_DATABASE_URL } from './test-db.js';
 
 export interface TestAppOptions {
   /** Troca o ledger (ex.: um que conta chamadas ou falha de propósito). */
   ledger?: LedgerPort;
+  /** Troca o modelo do agente (os testes nunca chamam o modelo real). */
+  llm?: LlmClient;
   /** Variáveis de ambiente extras (ex.: RECONCILIATION_CRON para o teste do agendamento). */
   env?: Record<string, string>;
 }
@@ -33,10 +41,13 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<INest
     QUEUE_POLLING_SECONDS: '0.5',
     // Sem conciliação agendada: ela rodaria no meio dos outros testes.
     RECONCILIATION_CRON: 'off',
+    // Agente em modo demonstração por padrão; os testes do agente trocam o LlmClient.
+    DEMO_REPLAY: 'true',
     ...options.env,
   });
   let builder = Test.createTestingModule({ imports: [AppModule.forRoot(env)] });
   if (options.ledger) builder = builder.overrideProvider(LEDGER).useValue(options.ledger);
+  if (options.llm) builder = builder.overrideProvider(LLM_CLIENT).useValue(options.llm);
 
   const app = setupApp((await builder.compile()).createNestApplication(APP_OPTIONS));
   // Porta real: o POST /simulate envia para a própria api, e o supertest reaproveita o servidor
@@ -52,7 +63,13 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<INest
  */
 export async function clearQueues(app: INestApplication): Promise<void> {
   const { boss } = app.get(QueueService);
-  for (const queue of [PAYMENT_EVENTS_QUEUE, PAYMENT_EVENTS_DLQ]) {
+  const queues = [
+    PAYMENT_EVENTS_QUEUE,
+    PAYMENT_EVENTS_DLQ,
+    RECONCILIATION_QUEUE,
+    INVESTIGATIONS_QUEUE,
+  ];
+  for (const queue of queues) {
     for (let attempt = 1; ; attempt++) {
       try {
         await boss.deleteAllJobs(queue);

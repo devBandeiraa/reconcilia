@@ -14,6 +14,9 @@ describe('loadEnv', () => {
       QUEUE_RETRY_DELAY_SECONDS: 2,
       QUEUE_POLLING_SECONDS: 2,
       RECONCILIATION_CRON: '*/5 * * * *',
+      DEMO_REPLAY: true,
+      GEMINI_MODEL: 'gemini-3.5-flash',
+      STORE_TIMEZONE: 'America/Sao_Paulo',
     });
   });
 
@@ -34,5 +37,16 @@ describe('loadEnv', () => {
     expect(loadEnv({ NODE_ENV: 'production', WEBHOOK_SECRET: 'x'.repeat(32) }).NODE_ENV).toBe(
       'production',
     );
+  });
+
+  it('sem DEMO_REPLAY, exige GEMINI_API_KEY (vazia conta como ausente)', () => {
+    expect(() => loadEnv({ DEMO_REPLAY: 'false', GEMINI_API_KEY: '' })).toThrow(/GEMINI_API_KEY/);
+    expect(loadEnv({ DEMO_REPLAY: 'false', GEMINI_API_KEY: 'chave-de-teste' }).DEMO_REPLAY).toBe(
+      false,
+    );
+  });
+
+  it('recusa fuso horário inválido', () => {
+    expect(() => loadEnv({ STORE_TIMEZONE: 'Marte/Olympus' })).toThrow(/STORE_TIMEZONE/);
   });
 });

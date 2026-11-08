@@ -1,6 +1,6 @@
 {
   "name": "@reconcilia/api",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "API NestJS do Reconcilia (o worker roda no mesmo processo).",
@@ -17,6 +17,7 @@
     "db:reset": "prisma migrate reset --force && prisma db seed"
   },
   "dependencies": {
+    "@google/genai": "3.0.0",
     "@nestjs/common": "12.4.0",
     "@nestjs/core": "12.4.0",
     "@nestjs/platform-express": "12.4.0",

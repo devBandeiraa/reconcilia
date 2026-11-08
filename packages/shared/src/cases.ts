@@ -72,7 +72,7 @@ export type TimelineItem = z.infer<typeof TimelineItemSchema>;
 
 export const CaseHistoryItemSchema = z.object({
   at: isoDateTime,
-  kind: z.enum(['DETECTED', 'RESOLVED', 'DISMISSED']),
+  kind: z.enum(['DETECTED', 'INVESTIGATION', 'RESOLVED', 'DISMISSED']),
   description: z.string(),
 });
 export type CaseHistoryItem = z.infer<typeof CaseHistoryItemSchema>;

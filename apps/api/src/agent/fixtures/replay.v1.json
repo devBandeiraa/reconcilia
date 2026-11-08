@@ -1,0 +1,52 @@
+{
+  "_sobre": "Roteiros do modo demonstração (DEMO_REPLAY=true), no formato de uma investigação real: as mesmas ferramentas, na mesma ordem. As ferramentas rodam de verdade; os {{campos}} do diagnóstico são preenchidos com os dados que elas retornaram.",
+  "PAYMENT_WITHOUT_ORDER": {
+    "rounds": [["getOrder", "getGatewayEvents", "getGatewayStatement"], ["getErpEvents"]],
+    "diagnosis": {
+      "diagnosis": "O gateway capturou {{capturedCents}} centavos do pedido {{orderExternalId}} ({{chargeId}}, em {{capturedAt}}), mas o webhook de captura nunca chegou: só chegaram {{gatewayEventTypes}}. Por isso o pedido segue {{orderStatus}} na loja. O ERP registrou {{erpCents}}, o mesmo valor do extrato, o que confirma que o pagamento aconteceu.",
+      "evidence": [
+        "extrato: {{chargeId}} capturado {{capturedCents}} em {{capturedAt}}",
+        "webhooks recebidos: {{gatewayEventTypes}} (nenhum CAPTURED)",
+        "pedido {{orderExternalId}}: {{orderStatus}}, total {{totalCents}}",
+        "ERP: pagamento de {{erpCents}}"
+      ],
+      "suggestedAction": { "kind": "MARK_ORDER_PAID", "params": { "chargeId": "{{chargeId}}" } },
+      "confidence": 0.93
+    }
+  },
+  "DUPLICATE_WEBHOOK": {
+    "rounds": [
+      ["getOrder", "getGatewayEvents"],
+      ["getGatewayStatement", "getErpEvents"]
+    ],
+    "diagnosis": {
+      "diagnosis": "O webhook {{duplicateEventId}} chegou {{duplicateCount}} vezes, mas foi aplicado uma única vez (em {{duplicateProcessedAt}}): a ingestão é idempotente. O extrato tem uma única captura de {{capturedCents}} e o pedido {{orderExternalId}} está {{orderStatus}}. Não há pagamento em dobro; os reenvios podem ser ignorados.",
+      "evidence": [
+        "webhook {{duplicateEventId}}: receivedCount {{duplicateCount}}, aplicado em {{duplicateProcessedAt}}",
+        "extrato: uma captura {{chargeId}} de {{capturedCents}}",
+        "pedido {{orderExternalId}}: {{orderStatus}}"
+      ],
+      "suggestedAction": {
+        "kind": "IGNORE_DUPLICATE",
+        "params": { "eventId": "{{duplicateEventId}}" }
+      },
+      "confidence": 0.95
+    }
+  },
+  "AMOUNT_MISMATCH": {
+    "rounds": [["getOrder", "getGatewayStatement"], ["getErpEvents"]],
+    "diagnosis": {
+      "diagnosis": "O gateway capturou {{capturedCents}} centavos do pedido {{orderExternalId}} (total {{totalCents}}, {{installments}} parcela(s)), mas o ERP registrou {{erpCents}}: uma diferença de {{differenceCents}}. O padrão é de juros de parcelamento lançados só no ERP. O valor correto é o capturado; o lançamento do ERP precisa de ajuste.",
+      "evidence": [
+        "extrato: {{chargeId}} capturado {{capturedCents}}",
+        "pedido {{orderExternalId}}: total {{totalCents}} em {{installments}} parcela(s)",
+        "ERP: pagamento de {{erpCents}} (diferença de {{differenceCents}})"
+      ],
+      "suggestedAction": {
+        "kind": "FLAG_ERP_DIVERGENCE",
+        "params": { "expectedCents": "{{capturedCents}}", "erpCents": "{{erpCents}}" }
+      },
+      "confidence": 0.88
+    }
+  }
+}
