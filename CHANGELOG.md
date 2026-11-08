@@ -7,6 +7,29 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.8.0] - 2026-11-08
+
+### Adicionado
+
+- `POST /actions/:id/approve` (`{ decidedBy }`): aprova e o backend executa uma única vez, com
+  transições condicionais no banco; efeito, caso `RESOLVED` e auditoria no mesmo COMMIT.
+- `POST /actions/:id/reject` (`{ decidedBy, reason? }`): nada é executado e o caso segue `OPEN`.
+- `GET /actions/:id`: decisão, resultado da execução e trilha de auditoria.
+- Efeitos das ações: `MARK_ORDER_PAID` (pedido `PAID` e captura no ledger com o mesmo
+  `transactionId` do worker), `REPROCESS_WEBHOOK` (reenfileira se não foi aplicado),
+  `FLAG_ERP_DIVERGENCE` (pedido de ajuste ao ERP simulado, idempotente por ação) e
+  `IGNORE_DUPLICATE` (encerra o caso).
+- Falha no efeito: nada é gravado, a ação segue `APPROVED` e a resposta é 422.
+- Trilha de auditoria `audit_log` (append-only por trigger) e o histórico do caso com as decisões
+  e execuções.
+- ERP simulado: tabela `sim_erp_adjustments` atrás da interface `ErpAdjustmentSink`.
+- Seção "Aprovação humana" no README e ADR 0008.
+
+### Alterado
+
+- A conciliação não reabre casos resolvidos ou descartados; o resultado ganha `alreadyResolved`.
+- O ledger devolve o que fez (`posted`, `already-posted` ou `skipped`).
+
 ## [0.7.0] - 2026-11-08
 
 ### Adicionado
@@ -174,7 +197,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
   formulários de issue.
 - ADR 0001: monorepo com pnpm workspaces.
 
-[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.7.0...HEAD
+[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.4.0...v0.5.0
