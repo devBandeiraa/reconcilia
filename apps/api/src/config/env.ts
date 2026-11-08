@@ -42,7 +42,8 @@ export const EnvSchema = z
       (value) => (value === '' ? undefined : value),
       z.string().optional(),
     ),
-    GEMINI_MODEL: z.string().min(1).default('gemini-3.8-flash'),
+    /** Modelo do Gemini. 3.5-flash respondeu de forma estável no aceite; o 3.8 deu 503/504. */
+    GEMINI_MODEL: z.string().min(1).default('gemini-3.5-flash'),
     /** Fuso da loja: só para exibir horários locais; no banco tudo é UTC. */
     STORE_TIMEZONE: z
       .string()

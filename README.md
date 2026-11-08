@@ -16,9 +16,9 @@ Demo ao vivo (em construção) · Vídeo de 1 min (em construção) · Documenta
 
 </div>
 
-> **Status:** v0.6.0. Base do monorepo, modelo de dados com garantias no banco, simulador das
-> 3 falhas, ingestão idempotente de webhooks com fila, ledger em partidas dobradas e
-> conciliação validada contra o gabarito estão prontos. As seções marcadas como
+> **Status:** v0.7.0. Base do monorepo, modelo de dados com garantias no banco, simulador das
+> 3 falhas, ingestão idempotente de webhooks com fila, ledger em partidas dobradas, conciliação
+> validada contra o gabarito e agente de IA investigador estão prontos. As seções marcadas como
 > _em construção_ chegam nas próximas fases; veja o [roadmap](#roadmap).
 
 ## O problema
@@ -83,8 +83,16 @@ só é executada depois que uma pessoa aprova.
   nada (índice único parcial). Prova:
   [`apps/api/test/reconciliation.test.ts`](apps/api/test/reconciliation.test.ts),
   [seção Conciliação](#conciliação), [ADR 0006](docs/adr/0006-conciliacao.md).
-- Agente só de leitura, com no máximo 8 rodadas e saída validada por schema: _em construção
-  (fase 7)_.
+- **Agente de IA só de leitura, com limites claros.**
+  - As ferramentas rodam em transação `READ ONLY` (o Postgres recusa escrita).
+  - O pedido vem do caso, nunca do modelo.
+  - São no máximo 8 rodadas.
+  - A saída é validada por schema e conferida contra os dados: um id inventado é recusado.
+  - Testado sem o modelo real e validado com o Gemini.
+
+  Prova: [`apps/api/test/agent.test.ts`](apps/api/test/agent.test.ts),
+  [seção Agente de IA](#agente-de-ia), [ADR 0007](docs/adr/0007-agente-somente-leitura.md).
+
 - Aprovação humana com execução idempotente e trilha de auditoria: _em construção (fase 8)_.
 
 ## Stack
@@ -130,6 +138,11 @@ nada, use `pnpm --filter @reconcilia/api db:migrate`.
 As variáveis de ambiente têm padrão para desenvolvimento local. Para mudar, copie
 [`apps/api/.env.example`](apps/api/.env.example) para `apps/api/.env` e
 [`apps/web/.env.example`](apps/web/.env.example) para `apps/web/.env.local`.
+
+O agente de IA roda por padrão em **modo demonstração** (`DEMO_REPLAY=true`): sem chave, sem
+custo e sem chamar o Gemini. Para usar o Gemini de verdade, crie uma chave gratuita no Google AI
+Studio (não exige cartão) e, no `apps/api/.env`, defina `DEMO_REPLAY=false` e
+`GEMINI_API_KEY=...`.
 
 ## Simulador
 
@@ -321,13 +334,96 @@ das fases anteriores, deram este resultado:
 seed 5005: gabarito 47 linhas, casos abertos 47 → idênticos
 ```
 
+## Agente de IA
+
+Cada caso pode ser investigado por um agente que **lê** os dados dos três lados e **recomenda**
+uma ação. Ele não executa nada: a ação fica `PENDING` até uma pessoa aprovar (fase 8).
+
+```bash
+curl -X POST localhost:3001/cases/<id>/investigate   # 202 {investigationId, status: QUEUED}
+curl localhost:3001/investigations/<investigationId> # polling: passos, diagnóstico, ação
+```
+
+| Ferramenta            | O que lê (sempre do pedido do caso)                                                      |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| `getOrder`            | Status, total, parcelas e criação (UTC e fuso da loja)                                   |
+| `getGatewayEvents`    | Webhooks do gateway: tipo, valor, `receivedCount`, quando ocorreu, chegou e foi aplicado |
+| `getGatewayStatement` | Extrato do gateway: as capturas, inclusive as cujo webhook se perdeu                     |
+| `getErpEvents`        | Lançamentos do ERP: tipo, valor e quando foram registrados                               |
+| `submitDiagnosis`     | Saída final: diagnóstico, evidências, ação sugerida e confiança (0 a 1)                  |
+
+As ações que ele pode sugerir são `MARK_ORDER_PAID` (`chargeId`), `REPROCESS_WEBHOOK` (`eventId`),
+`IGNORE_DUPLICATE` (`eventId`) e `FLAG_ERP_DIVERGENCE` (`expectedCents`, `erpCents`). O prompt de
+sistema é versionado em [`prompts/system.v1.md`](apps/api/src/agent/prompts/system.v1.md).
+
+**Limites:**
+
+- **Só leitura, garantido pelo banco:** cada ferramenta roda numa transação `READ ONLY`, então o
+  Postgres recusa qualquer escrita. Quem grava a investigação e a ação é o backend, depois.
+- **O pedido vem do caso:** as ferramentas não têm argumentos e a ação não tem `orderId`.
+- **No máximo 8 chamadas ao modelo:** se passar disso, a investigação fica `FAILED`.
+- **Saída validada e conferida:** o `submitDiagnosis` passa por Zod e pela conferência contra os
+  dados. O `chargeId` e o `eventId` precisam ser do pedido, e os valores precisam bater com o
+  extrato e o ERP. Um diagnóstico inválido volta para o modelo **uma vez**; na segunda, a
+  investigação fica `FAILED`.
+- **Cota esgotada (429):** a investigação fica `FAILED` na hora, com o motivo, e o worker segue.
+  Erros transitórios (5xx) têm até 3 tentativas curtas.
+- **Uma investigação ativa por caso:** quem garante é um índice único parcial. Se a api reiniciar
+  no meio de uma, ela vira `FAILED` na subida.
+
+**Modo demonstração (`DEMO_REPLAY=true`, o padrão):** o agente segue roteiros por tipo de caso
+([`replay.v1.json`](apps/api/src/agent/fixtures/replay.v1.json)) sem chamar o Gemini. As
+ferramentas rodam de verdade e o diagnóstico é preenchido com os dados delas, então ele passa pela
+mesma validação.
+
+**Exemplo real, com o Gemini (`gemini-3.5-flash`).** O caso era do tipo `DUPLICATE_WEBHOOK`, e o
+agente usou 2 rodadas e 9 segundos:
+
+```
+passos:  1: getOrder → pedido S5005-0002 PAID, total 83640
+         1: getGatewayEvents → 2 webhooks (AUTHORIZED, CAPTURED); 1 com reenvio
+         1: getGatewayStatement → 1 captura(s) no extrato, soma 83640
+         1: getErpEvents → 1 lançamento(s) no ERP; pagamentos somam 83640
+         2: submitDiagnosis → diagnóstico aceito: IGNORE_DUPLICATE
+ação:    IGNORE_DUPLICATE { eventId: "evt_S5005-0002_captured" }   confiança 1
+diagnóstico: O webhook de captura (evt_S5005-0002_captured) foi recebido 5 vezes pelo sistema
+  da loja, porém foi processado e aplicado com sucesso apenas uma vez. O pedido já se encontra
+  com status PAID, o extrato do gateway confirma a captura de 83640 centavos (ch_S5005-0002) e o
+  ERP registrou o pagamento corretamente no mesmo valor. [...] a ação recomendada é ignorar o
+  evento duplicado.
+evidências:
+  - webhook gateway: evt_S5005-0002_captured (CAPTURED, 83640 centavos) teve receivedCount = 5 e
+    foi processado uma vez em 2026-11-08T17:07:12.365Z
+  - extrato gateway: chargeId ch_S5005-0002 capturado no valor de 83640 centavos em
+    2026-11-08T17:08:12.770Z
+  - erp: lançamento erp_S5005-0002_payment (PAYMENT_RECORDED) no valor de 83640 centavos
+```
+
+Os outros dois tipos também terminaram certos com o Gemini:
+
+- `PAYMENT_WITHOUT_ORDER` → `MARK_ORDER_PAID`, em 23s.
+- `AMOUNT_MISMATCH` → `FLAG_ERP_DIVERGENCE` (20960 contra 22213), em 42s.
+
 ## Testes
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-São 61 testes hoje. Os 45 da api rodam contra um PostgreSQL real:
+São 79 testes hoje. Os 63 da api rodam contra um PostgreSQL real, e **nenhum chama o modelo
+real**: o `LlmClient` é trocado por roteiros (`FakeLlmClient`).
+
+- **Agente (16):**
+  - Cada tipo de caso termina `DONE` com a ação esperada.
+  - Passar de 8 rodadas termina `FAILED`.
+  - Um id inventado é recusado e o diagnóstico corrigido é aceito.
+  - Um diagnóstico inválido duas vezes termina `FAILED`.
+  - O 429 termina `FAILED`, e o worker segue funcionando.
+  - **O banco fica idêntico (md5 de todas as tabelas) antes e depois das ferramentas**, e uma
+    escrita dentro da transação delas é recusada.
+  - Os endpoints devolvem 200, 409, 404 e 400.
+  - Uma investigação interrompida é liberada.
+  - O modo demonstração funciona ponta a ponta.
 
 - **Conciliação (7):**
   - Com a seed fixa, os casos abertos são exatamente os do gabarito (22 casos dos 3 tipos na
@@ -450,10 +546,16 @@ sistema externo e não faz parte do modelo do Reconcilia.
 - [ADR 0004: fila no Postgres](docs/adr/0004-fila-no-postgres.md)
 - [ADR 0005: ledger em partidas dobradas](docs/adr/0005-ledger-partidas-dobradas.md)
 - [ADR 0006: conciliação](docs/adr/0006-conciliacao.md)
+- [ADR 0007: agente somente leitura](docs/adr/0007-agente-somente-leitura.md)
 
 ## Limitações conhecidas
 
-- Ainda não há agente nem aprovação: os casos ficam abertos.
+- Ainda não há aprovação nem execução: as ações sugeridas pelo agente ficam `PENDING`.
+- O plano gratuito do Gemini tem cota baixa e instabilidade. No aceite, o `gemini-3.8-flash`
+  respondeu 503 e 504, e a cota por minuto acabou depois de poucas investigações. Por isso o
+  padrão é o modo demonstração e o modelo padrão é o `gemini-3.5-flash`, que foi o que respondeu
+  de forma estável.
+- Os roteiros do modo demonstração foram escritos à mão, no formato de uma investigação real.
 - Hoje um caso resolvido pode ser reaberto pela próxima conciliação, se a divergência continuar
   no dado (por exemplo, `received_count > 1` não volta a 1). Como a resolução só chega na fase 8,
   a regra de não reabrir entra junto com ela.
@@ -482,7 +584,7 @@ sistema externo e não faz parte do modelo do Reconcilia.
 | v0.4.0 | Webhooks idempotentes + fila                 | ✅     |
 | v0.5.0 | Partidas dobradas                            | ✅     |
 | v0.6.0 | Detecção de divergências                     | ✅     |
-| v0.7.0 | Agente de IA investigador                    | 🚧     |
+| v0.7.0 | Agente de IA investigador                    | ✅     |
 | v0.8.0 | Aprovação humana e execução                  | 🚧     |
 | v0.9.0 | Telas em Next.js                             | 🚧     |
 | v1.0.0 | No ar + README final                         | 🚧     |
