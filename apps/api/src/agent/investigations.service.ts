@@ -87,6 +87,23 @@ export class InvestigationsService {
     }
   }
 
+  /**
+   * Investigações RUNNING de uma execução anterior (a api caiu ou reiniciou no meio) nunca vão
+   * terminar e travariam o caso (uma ativa por caso). Na subida, viram FAILED com o motivo.
+   * Pressupõe uma instância só da api, que é o caso do deploy (Render Free).
+   */
+  async recoverInterrupted(): Promise<number> {
+    const { count } = await this.prisma.investigation.updateMany({
+      where: { status: InvestigationStatus.RUNNING },
+      data: {
+        status: InvestigationStatus.FAILED,
+        failureReason: 'Interrompida: a api reiniciou durante a investigação. Peça de novo.',
+      },
+    });
+    if (count > 0) this.logger.warn({ count }, 'investigações interrompidas marcadas como FAILED');
+    return count;
+  }
+
   /** Roda o agente e grava o resultado. Nunca lança: falha vira FAILED com o motivo. */
   async execute(investigationId: string): Promise<void> {
     const claimed = await this.prisma.investigation.updateMany({
