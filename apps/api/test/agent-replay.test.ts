@@ -3,6 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import { CASE_TYPES } from '@reconcilia/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { InvestigationsService } from '../src/agent/investigations.service.js';
 import { caseOf, EXPECTED_ACTION, investigate } from './support/agent-fixtures.js';
 import { clearQueues, createTestApp, waitFor } from './support/test-app.js';
 import { createTestPrisma, truncateAll } from './support/test-db.js';
@@ -27,6 +28,22 @@ beforeAll(async () => {
 afterAll(async () => {
   await app.close();
   await prisma.$disconnect();
+});
+
+describe('investigação interrompida', () => {
+  it('RUNNING de uma execução anterior vira FAILED e libera o caso', async () => {
+    const target = await caseOf(prisma, 'AMOUNT_MISMATCH', 1);
+    const stuck = await prisma.investigation.create({
+      data: { caseId: target.caseId, status: 'RUNNING' },
+    });
+
+    expect(await app.get(InvestigationsService).recoverInterrupted()).toBe(1);
+
+    expect(await prisma.investigation.findUniqueOrThrow({ where: { id: stuck.id } })).toMatchObject(
+      { status: 'FAILED', failureReason: expect.stringMatching(/Interrompida/) as unknown },
+    );
+    expect((await investigate(app, target.caseId)).status).toBe('DONE');
+  });
 });
 
 describe('modo demonstração (DEMO_REPLAY)', () => {

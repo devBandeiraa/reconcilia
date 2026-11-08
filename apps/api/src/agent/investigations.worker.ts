@@ -15,6 +15,7 @@ export class InvestigationsWorker implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
+    await this.investigations.recoverInterrupted();
     await this.queue.boss.work<InvestigationJob>(
       INVESTIGATIONS_QUEUE,
       {
