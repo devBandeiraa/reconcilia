@@ -7,6 +7,31 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.9.0] - 2026-11-08
+
+### Adicionado
+
+- Interface em Next.js 16 com shadcn/ui (Radix) e Tailwind 4, em português e no tema escuro:
+  - `/casos`: contadores de abertos por tipo e de resolvidos (clicar filtra), filtros de tipo e
+    status, paginação de 20 em 20, tabela no desktop e cartões no celular. Os botões "Gerar
+    falhas" (`POST /simulate`) e "Conciliar agora" (`POST /reconcile`) mostram o resultado numa
+    mensagem lida pelo leitor de tela.
+  - `/casos/[id]`: loja, gateway (com o extrato) e ERP lado a lado, linha do tempo com
+    duplicados em âmbar (×N), alternância entre UTC e o fuso da loja e histórico do caso.
+  - Painel do agente: "Investigar" com polling a cada 1,5s enquanto a investigação roda; passos,
+    diagnóstico, evidências, barra de confiança e a ação sugerida. "Aprovar" e "Recusar" (com
+    motivo, num diálogo) pedem o nome de quem decide, lembrado no navegador.
+  - `/saude`: saldo do ledger por conta com a conferência da soma zero, fila de mortos e
+    `GET /health`.
+- Estados de carregando, vazio, erro com "Tentar de novo" e "Acordando o servidor…" (api do
+  plano gratuito dormindo), com novas tentativas por até 90s.
+- Status da api no cabeçalho, link para pular para o conteúdo, foco visível e rótulos em todos
+  os campos.
+- Na api: `CORS_ORIGIN` (lista de origens), e o `GET /cases/:id` passa a trazer as
+  investigações do caso e o fuso da loja (`storeTimezone`).
+- `NEXT_PUBLIC_API_URL` na web, validada com Zod no build.
+- GIF do fluxo completo e capturas em `docs/img/`, e ADR 0009.
+
 ## [0.8.0] - 2026-11-08
 
 ### Adicionado
@@ -197,7 +222,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
   formulários de issue.
 - ADR 0001: monorepo com pnpm workspaces.
 
-[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.8.0...HEAD
+[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.5.0...v0.6.0
