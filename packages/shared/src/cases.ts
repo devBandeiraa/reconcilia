@@ -100,5 +100,15 @@ export const CaseDetailSchema = z.object({
   /** Loja, gateway, extrato e ERP em ordem cronológica. */
   timeline: z.array(TimelineItemSchema),
   history: z.array(CaseHistoryItemSchema),
+  /** Investigações do caso, mais recente primeiro (o detalhe está em GET /investigations/:id). */
+  investigations: z.array(
+    z.object({
+      id: z.uuid(),
+      status: z.enum(['QUEUED', 'RUNNING', 'DONE', 'FAILED']),
+      createdAt: isoDateTime,
+    }),
+  ),
+  /** Fuso da loja (IANA). Os horários são UTC; a interface usa este fuso só para exibir. */
+  storeTimezone: z.string(),
 });
 export type CaseDetail = z.infer<typeof CaseDetailSchema>;

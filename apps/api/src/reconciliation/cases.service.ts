@@ -9,6 +9,8 @@ import type {
 } from '@reconcilia/shared';
 import { z } from 'zod';
 import type { Prisma } from '../generated/prisma/client.js';
+import { ENV } from '../config/config.module.js';
+import type { Env } from '../config/env.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   GATEWAY_STATEMENT_SOURCE,
@@ -66,6 +68,7 @@ export class CasesService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(GATEWAY_STATEMENT_SOURCE) private readonly statement: GatewayStatementSource,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   async list(query: CaseListQuery): Promise<CasePage> {
@@ -101,7 +104,13 @@ export class CasesService {
       this.prisma.investigation.findMany({
         where: { caseId: id },
         orderBy: { createdAt: 'asc' },
-        select: { createdAt: true, status: true, suggestedAction: true, failureReason: true },
+        select: {
+          id: true,
+          createdAt: true,
+          status: true,
+          suggestedAction: true,
+          failureReason: true,
+        },
       }),
       this.prisma.auditEntry.findMany({
         where: { caseId: id },
@@ -203,6 +212,12 @@ export class CasesService {
       },
       timeline,
       history,
+      investigations: [...investigations].reverse().map((i) => ({
+        id: i.id,
+        status: i.status,
+        createdAt: i.createdAt.toISOString(),
+      })),
+      storeTimezone: this.env.STORE_TIMEZONE,
     };
   }
 }

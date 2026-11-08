@@ -161,6 +161,8 @@ describe('GET /cases e GET /cases/:id', () => {
       receivedCount: (duplicate as { copies: number }).copies,
     });
     expect(detail.history).toEqual([expect.objectContaining({ kind: 'DETECTED' })]);
+    expect(detail.storeTimezone).toBe('America/Sao_Paulo');
+    expect(detail.investigations).toEqual([]);
   });
 
   it('caso inexistente → 404; id que não é UUID → 400', async () => {

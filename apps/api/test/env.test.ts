@@ -17,6 +17,7 @@ describe('loadEnv', () => {
       DEMO_REPLAY: true,
       GEMINI_MODEL: 'gemini-3.5-flash',
       STORE_TIMEZONE: 'America/Sao_Paulo',
+      CORS_ORIGIN: ['http://localhost:3000'],
     });
   });
 

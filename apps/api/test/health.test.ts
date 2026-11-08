@@ -35,4 +35,12 @@ describe('GET /health', () => {
     const spec = res.body as { paths: Record<string, unknown> };
     expect(spec.paths).toHaveProperty('/health');
   });
+
+  it('CORS: só a origem da web recebe permissão', async () => {
+    const allowed = await request(server).get('/health').set('Origin', 'http://localhost:3000');
+    expect(allowed.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+
+    const other = await request(server).get('/health').set('Origin', 'https://evil.example');
+    expect(other.headers['access-control-allow-origin']).toBeUndefined();
+  });
 });
