@@ -4,7 +4,7 @@ import { DEV_WEBHOOK_SECRET, SIGNATURE_HEADER, type WebhookAck } from '@reconcil
 import { buildMessages, generateScenario, PATHS } from '@reconcilia/simulator';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { LedgerPort } from '../src/ledger/ledger.port.js';
+import type { LedgerOutcome, LedgerPort } from '../src/ledger/ledger.port.js';
 import { PAYMENT_EVENTS_QUEUE } from '../src/queue/queue.constants.js';
 import { QueueService } from '../src/queue/queue.service.js';
 import { clearQueues, createTestApp, signedPost, waitFor } from './support/test-app.js';
@@ -14,17 +14,17 @@ import { createTestPrisma, truncateAll } from './support/test-db.js';
 class CountingLedger implements LedgerPort {
   attempts = 0;
   failuresLeft = 0;
-  recordRefund(): Promise<void> {
-    return Promise.resolve();
+  recordRefund(): Promise<LedgerOutcome> {
+    return Promise.resolve('posted');
   }
 
-  recordCapture(): Promise<void> {
+  recordCapture(): Promise<LedgerOutcome> {
     this.attempts++;
     if (this.failuresLeft > 0) {
       this.failuresLeft--;
       return Promise.reject(new Error('falha simulada do ledger'));
     }
-    return Promise.resolve();
+    return Promise.resolve('posted');
   }
 }
 
