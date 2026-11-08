@@ -1,5 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiInternalServerErrorResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { type LedgerBalance, LedgerBalanceSchema } from '@reconcilia/shared';
 import { toOpenApiSchema } from '../common/openapi.js';
 import { LedgerService } from './ledger.service.js';
@@ -17,6 +22,7 @@ export class LedgerController {
       'total é sempre 0; qualquer outro valor indica um defeito.',
   })
   @ApiOkResponse({ description: 'Saldos', schema: toOpenApiSchema(LedgerBalanceSchema) })
+  @ApiInternalServerErrorResponse({ description: 'Falha ao ler o ledger' })
   balance(): Promise<LedgerBalance> {
     return this.ledger.balance();
   }
