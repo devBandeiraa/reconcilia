@@ -7,6 +7,34 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.7.0] - 2026-11-08
+
+### Adicionado
+
+- Agente de IA investigador: loop de function calling com no máximo 8 rodadas, prompt de
+  sistema versionado (`prompts/system.v1.md`) e as ferramentas `getOrder`, `getGatewayEvents`,
+  `getGatewayStatement` e `getErpEvents` (sem parâmetros; o pedido vem do caso), mais o
+  `submitDiagnosis`.
+- Ferramentas em transação `READ ONLY`: o Postgres recusa qualquer escrita feita por elas.
+- `submitDiagnosis` validado com Zod (`params` estritos por tipo de ação, sem `orderId`) e
+  conferido contra os dados do pedido; inválido volta ao modelo uma vez e, na segunda, a
+  investigação fica `FAILED`.
+- Interface `LlmClient` com `GeminiClient` (`@google/genai` 3.0.0), `FakeLlmClient` (testes) e
+  `ReplayLlmClient` (modo demonstração com roteiros JSON por tipo de caso).
+- `POST /cases/:id/investigate` (202; 200 se já há investigação ativa; 409 se o caso não está
+  `OPEN`) e `GET /investigations/:id` para polling; o worker grava `DONE` + action `PENDING` ou
+  `FAILED` com o motivo.
+- Coluna `investigations.evidence` e índice único parcial: uma investigação ativa por caso.
+- Investigações interrompidas (a api reiniciou) viram `FAILED` na subida.
+- O histórico do caso mostra as investigações.
+- `DEMO_REPLAY` (padrão `true`), `GEMINI_API_KEY`, `GEMINI_MODEL` (padrão `gemini-3.5-flash`) e
+  `STORE_TIMEZONE` no `apps/api/.env.example`.
+- Seção "Agente de IA" no README e ADR 0007.
+
+### Alterado
+
+- Retry do SDK do Gemini só em 5xx (3 tentativas, até 8s) e timeout de 60s; 429 falha na hora.
+
 ## [0.6.0] - 2026-11-08
 
 ### Adicionado
@@ -146,7 +174,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
   formulários de issue.
 - ADR 0001: monorepo com pnpm workspaces.
 
-[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.6.0...HEAD
+[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.3.0...v0.4.0

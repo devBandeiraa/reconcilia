@@ -4,6 +4,7 @@ import { PgBoss, type Queue, type SendOptions } from 'pg-boss';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import {
+  INVESTIGATIONS_QUEUE,
   PAYMENT_EVENTS_DLQ,
   PAYMENT_EVENTS_QUEUE,
   RECONCILIATION_QUEUE,
@@ -39,6 +40,7 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
       deadLetter: PAYMENT_EVENTS_DLQ,
     });
     await this.ensureQueue({ name: RECONCILIATION_QUEUE, policy: 'singleton' });
+    await this.ensureQueue({ name: INVESTIGATIONS_QUEUE, policy: 'standard' });
   }
 
   async onModuleDestroy(): Promise<void> {
