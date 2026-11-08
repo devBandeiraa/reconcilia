@@ -15,7 +15,7 @@ describe('loadEnv', () => {
       QUEUE_POLLING_SECONDS: 2,
       RECONCILIATION_CRON: '*/5 * * * *',
       DEMO_REPLAY: true,
-      GEMINI_MODEL: 'gemini-3.8-flash',
+      GEMINI_MODEL: 'gemini-3.5-flash',
       STORE_TIMEZONE: 'America/Sao_Paulo',
     });
   });
