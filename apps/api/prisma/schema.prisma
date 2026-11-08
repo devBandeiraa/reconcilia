@@ -176,12 +176,17 @@ model Investigation {
   status          InvestigationStatus @default(QUEUED)
   steps           Json                @default("[]")
   diagnosis       String?
+  /// Evidências citadas pelo agente (strings que apontam dados concretos das ferramentas).
+  evidence        Json                @default("[]")
   suggestedAction Json?               @map("suggested_action")
   confidence      Float?
   failureReason   String?             @map("failure_reason")
   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   actions         Action[]
 
+  /// No máximo uma investigação ativa (QUEUED ou RUNNING) por caso. O predicado está na forma
+  /// que o Postgres normaliza o IN (...), para o Prisma não ver drift.
+  @@unique([caseId], where: raw("status = ANY (ARRAY['QUEUED'::\"InvestigationStatus\", 'RUNNING'::\"InvestigationStatus\"])"), map: "investigations_one_active_per_case")
   @@index([caseId])
   @@map("investigations")
 }
