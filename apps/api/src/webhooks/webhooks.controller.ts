@@ -1,4 +1,4 @@
-import { Body, Controller, HttpStatus, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, Res, UseGuards } from '@nestjs/common';
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -33,7 +33,8 @@ interface JsonResponse {
 
 /**
  * Evento novo: 202. Duplicado: 200 com duplicate=true. O status é decidido depois de gravar, por
- * isso a resposta é enviada aqui (com @HttpCode o Nest reaplicaria um status fixo).
+ * isso a resposta é enviada aqui. O @HttpCode(202) nos métodos só define o status padrão (e o
+ * que o OpenAPI documenta); com @Res() sem passthrough, o status final é o deste helper.
  */
 function acknowledge(res: JsonResponse, { duplicate }: IngestResult): void {
   res.status(duplicate ? HttpStatus.OK : HttpStatus.ACCEPTED).json({ received: true, duplicate });
@@ -59,6 +60,7 @@ export class WebhooksController {
   ) {}
 
   @Post('store')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
     summary: 'Loja: pedido criado',
     description: 'Cria o pedido (status PENDING). Reenvio do mesmo externalId é ignorado.',
@@ -73,6 +75,7 @@ export class WebhooksController {
   }
 
   @Post('gateway')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
     summary: 'Gateway: cobrança autorizada, capturada ou estornada',
     description:
@@ -89,6 +92,7 @@ export class WebhooksController {
   }
 
   @Post('erp')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
     summary: 'ERP: pagamento, estorno ou ajuste registrado',
     description:
