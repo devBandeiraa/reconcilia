@@ -1,6 +1,15 @@
 import { DEV_WEBHOOK_SECRET } from '@reconcilia/shared';
 import { z } from 'zod';
 
+function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Banco do docker-compose (porta 5440 do host). Padrão só para desenvolvimento local. */
 export const LOCAL_DATABASE_URL = 'postgresql://reconcilia:reconcilia@localhost:5440/reconcilia';
 
@@ -26,8 +35,29 @@ export const EnvSchema = z
       .string()
       .regex(/^(off|\S+(\s+\S+){4})$/, 'cron de 5 campos ou off')
       .default('*/5 * * * *'),
+    /** true: o agente segue roteiros gravados (sem Gemini e sem custo). false: usa o Gemini. */
+    DEMO_REPLAY: z.stringbool().default(true),
+    /** Chave do Google AI Studio. Obrigatória quando DEMO_REPLAY=false. Vazia = ausente. */
+    GEMINI_API_KEY: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().optional(),
+    ),
+    GEMINI_MODEL: z.string().min(1).default('gemini-3.8-flash'),
+    /** Fuso da loja: só para exibir horários locais; no banco tudo é UTC. */
+    STORE_TIMEZONE: z
+      .string()
+      .refine(isValidTimeZone, 'fuso horário IANA inválido (ex.: America/Sao_Paulo)')
+      .default('America/Sao_Paulo'),
   })
   .superRefine((env, ctx) => {
+    if (!env.DEMO_REPLAY && !env.GEMINI_API_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['GEMINI_API_KEY'],
+        message:
+          'obrigatória com DEMO_REPLAY=false (ou use DEMO_REPLAY=true para o modo demonstração)',
+      });
+    }
     if (
       env.NODE_ENV === 'production' &&
       (env.WEBHOOK_SECRET === DEV_WEBHOOK_SECRET || env.WEBHOOK_SECRET.length < 32)
