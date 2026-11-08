@@ -7,6 +7,24 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.6.0] - 2026-11-08
+
+### Adicionado
+
+- Conciliação entre loja, gateway e ERP por pedido, com três tipos de caso:
+  `PAYMENT_WITHOUT_ORDER` (captura no extrato, pedido `PENDING` e nenhum `charge.captured`
+  recebido), `DUPLICATE_WEBHOOK` (`received_count > 1`) e `AMOUNT_MISMATCH` (extrato, pedido e ERP
+  não batem).
+- Abertura idempotente de casos: `ON CONFLICT DO NOTHING` contra o índice único parcial; a
+  divergência que já tem caso aberto conta em `alreadyOpen`.
+- `POST /reconcile`: roda na hora e devolve os casos abertos por tipo.
+- Conciliação agendada no pg-boss (cron em UTC, padrão a cada 5 minutos) numa fila `singleton`;
+  `RECONCILIATION_CRON` no `.env.example` (`off` desliga).
+- `GET /cases` (filtros por tipo e status, paginação) e `GET /cases/:id` (pedido, linha do tempo
+  dos três lados em UTC e ordem cronológica, duplicado destacado, histórico).
+- Interface `GatewayStatementSource`: a conciliação lê o extrato sem depender da tabela simulada.
+- Seção "Conciliação" no README e ADR 0006.
+
 ## [0.5.0] - 2026-11-08
 
 ### Adicionado
@@ -128,7 +146,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
   formulários de issue.
 - ADR 0001: monorepo com pnpm workspaces.
 
-[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.5.0...HEAD
+[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.2.0...v0.3.0

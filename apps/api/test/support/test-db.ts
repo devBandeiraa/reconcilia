@@ -22,7 +22,19 @@ export function createTestPrisma(): PrismaClient {
   return new PrismaClient({ adapter: new PrismaPg({ connectionString: TEST_DATABASE_URL }) });
 }
 
-/** Esvazia todas as tabelas entre os testes. */
+/**
+ * Esvazia todas as tabelas entre os testes. O TRUNCATE trava as tabelas em sequência e pode
+ * cruzar locks com o worker terminando um job do teste anterior (deadlock 40P01): tenta de novo.
+ */
 export async function truncateAll(prisma: PrismaClient): Promise<void> {
-  await prisma.$executeRawUnsafe(`TRUNCATE ${TABLES.map((t) => `"${t}"`).join(', ')} CASCADE`);
+  const sql = `TRUNCATE ${TABLES.map((t) => `"${t}"`).join(', ')} CASCADE`;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await prisma.$executeRawUnsafe(sql);
+      return;
+    } catch (error) {
+      const deadlock = String(error).includes('40P01');
+      if (!deadlock || attempt === 5) throw error;
+    }
+  }
 }

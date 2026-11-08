@@ -16,10 +16,10 @@ Demo ao vivo (em construção) · Vídeo de 1 min (em construção) · Documenta
 
 </div>
 
-> **Status:** v0.5.0. Base do monorepo, modelo de dados com garantias no banco, simulador das
-> 3 falhas, ingestão idempotente de webhooks com fila e ledger em partidas dobradas estão
-> prontos. As seções marcadas como _em construção_ chegam nas próximas fases; veja o
-> [roadmap](#roadmap).
+> **Status:** v0.6.0. Base do monorepo, modelo de dados com garantias no banco, simulador das
+> 3 falhas, ingestão idempotente de webhooks com fila, ledger em partidas dobradas e
+> conciliação validada contra o gabarito estão prontos. As seções marcadas como
+> _em construção_ chegam nas próximas fases; veja o [roadmap](#roadmap).
 
 ## O problema
 
@@ -78,7 +78,11 @@ só é executada depois que uma pessoa aprova.
   derivado do evento impede lançamento em dobro. Prova:
   [`apps/api/test/ledger.test.ts`](apps/api/test/ledger.test.ts), [seção Ledger](#ledger),
   [ADR 0005](docs/adr/0005-ledger-partidas-dobradas.md).
-- Conciliação validada contra o gabarito do simulador: _em construção (fase 6)_.
+- **Conciliação validada contra o gabarito do simulador.** Com a seed fixa, os casos abertos são
+  exatamente os do gabarito, mesmo conciliando antes de o worker terminar. Rodar de novo não abre
+  nada (índice único parcial). Prova:
+  [`apps/api/test/reconciliation.test.ts`](apps/api/test/reconciliation.test.ts),
+  [seção Conciliação](#conciliação), [ADR 0006](docs/adr/0006-conciliacao.md).
 - Agente só de leitura, com no máximo 8 rodadas e saída validada por schema: _em construção
   (fase 7)_.
 - Aprovação humana com execução idempotente e trilha de auditoria: _em construção (fase 8)_.
@@ -279,14 +283,60 @@ totalCents = 0 | transações 90 | lançamentos 180
 
 O a receber (R$ 43.245,70) é exatamente a soma das 90 capturas aplicadas.
 
+## Conciliação
+
+A conciliação compara, pedido a pedido, a **loja** (`orders`), o **gateway** (o extrato e os
+webhooks recebidos) e o **ERP**, e abre um caso para cada divergência:
+
+| Tipo                    | Quando abre                                                                                                | Falha do simulador |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------ |
+| `PAYMENT_WITHOUT_ORDER` | O extrato do gateway tem a captura, o pedido está `PENDING` e nenhum `charge.captured` desse pedido chegou | `lost`             |
+| `DUPLICATE_WEBHOOK`     | Algum evento do gateway do pedido chegou mais de uma vez (`received_count > 1`)                            | `duplicate`        |
+| `AMOUNT_MISMATCH`       | Valor capturado (extrato), total do pedido e valor do ERP não são os três iguais                           | `mismatch`         |
+
+- **Por que "nenhum `charge.captured` chegou":** uma captura que chegou mas ainda está na fila do
+  worker não é "pagamento sem pedido". Com isso, o resultado não depende do tempo do worker.
+- **Um caso aberto por pedido e tipo:** quem garante é o índice único parcial da fase 2. Abrir é um
+  `INSERT ... ON CONFLICT DO NOTHING`, então rodar de novo não duplica nem dá erro.
+- **Quando roda:** a cada 5 minutos, por um job agendado no pg-boss (`RECONCILIATION_CRON`, cron em
+  UTC), ou na hora, com `POST /reconcile`.
+
+```bash
+curl -X POST localhost:3001/reconcile
+curl "localhost:3001/cases?type=AMOUNT_MISMATCH&status=OPEN&limit=20"
+curl localhost:3001/cases/<id>
+```
+
+- **`GET /cases`:** lista com filtros por tipo e status, mais recentes primeiro, com paginação.
+- **`GET /cases/:id`:** traz o pedido e a **linha do tempo dos três lados** (loja, webhooks do
+  gateway com `receivedCount` e duplicado destacado, extrato e ERP) em ordem cronológica e em UTC,
+  além do histórico do caso.
+
+Com a api no ar, duas rodadas seguidas sobre o banco de desenvolvimento, com todas as simulações
+das fases anteriores, deram este resultado:
+
+```
+1ª: {"opened":{"PAYMENT_WITHOUT_ORDER":38,"DUPLICATE_WEBHOOK":132,"AMOUNT_MISMATCH":42},"alreadyOpen":0}
+2ª: {"opened":{"PAYMENT_WITHOUT_ORDER":0,"DUPLICATE_WEBHOOK":0,"AMOUNT_MISMATCH":0},"alreadyOpen":212}
+seed 5005: gabarito 47 linhas, casos abertos 47 → idênticos
+```
+
 ## Testes
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-São 54 testes hoje. Os 38 da api rodam contra um PostgreSQL real:
+São 61 testes hoje. Os 45 da api rodam contra um PostgreSQL real:
 
+- **Conciliação (7):**
+  - Com a seed fixa, os casos abertos são exatamente os do gabarito (22 casos dos 3 tipos na
+    seed 42).
+  - Rodar duas vezes não cria casos novos.
+  - Conciliar sem esperar a fila dá o mesmo resultado.
+  - `GET /cases` com filtros e paginação.
+  - `GET /cases/:id` com a linha do tempo ordenada e o duplicado destacado, mais os erros 404 e 400.
+  - O job agendado fica registrado.
 - **Ledger (10):**
   - Transação desbalanceada, com um só lançamento ou com valor 0 dá erro e não grava nada.
   - O mesmo `transactionId` postado de novo não duplica.
@@ -399,10 +449,14 @@ sistema externo e não faz parte do modelo do Reconcilia.
 - [ADR 0003: simulador e sistemas externos](docs/adr/0003-simulador-e-sistemas-externos.md)
 - [ADR 0004: fila no Postgres](docs/adr/0004-fila-no-postgres.md)
 - [ADR 0005: ledger em partidas dobradas](docs/adr/0005-ledger-partidas-dobradas.md)
+- [ADR 0006: conciliação](docs/adr/0006-conciliacao.md)
 
 ## Limitações conhecidas
 
-- Ainda não há conciliação nem agente.
+- Ainda não há agente nem aprovação: os casos ficam abertos.
+- Hoje um caso resolvido pode ser reaberto pela próxima conciliação, se a divergência continuar
+  no dado (por exemplo, `received_count > 1` não volta a 1). Como a resolução só chega na fase 8,
+  a regra de não reabrir entra junto com ela.
 - O ledger registra só o lado do gateway (captura e estorno). Liquidação (o dinheiro saindo do
   gateway para a conta da loja), taxas e os ajustes do ERP ficam fora por enquanto.
 - Pedidos marcados como pagos antes da v0.5.0 não têm lançamento: o ledger começou a registrar
@@ -427,7 +481,7 @@ sistema externo e não faz parte do modelo do Reconcilia.
 | v0.3.0 | Gerador de tráfego e das 3 falhas            | ✅     |
 | v0.4.0 | Webhooks idempotentes + fila                 | ✅     |
 | v0.5.0 | Partidas dobradas                            | ✅     |
-| v0.6.0 | Detecção de divergências                     | 🚧     |
+| v0.6.0 | Detecção de divergências                     | ✅     |
 | v0.7.0 | Agente de IA investigador                    | 🚧     |
 | v0.8.0 | Aprovação humana e execução                  | 🚧     |
 | v0.9.0 | Telas em Next.js                             | 🚧     |
