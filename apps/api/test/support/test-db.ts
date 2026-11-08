@@ -11,6 +11,7 @@ const TABLES = [
   'investigations',
   'cases',
   'ledger_entries',
+  'ledger_transactions',
   'erp_events',
   'payment_events',
   'orders',
