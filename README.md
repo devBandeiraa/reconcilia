@@ -16,9 +16,9 @@ Demo ao vivo (em construção) · Vídeo de 1 min (em construção) · Documenta
 
 </div>
 
-> **Status:** v0.3.0. A base do monorepo, o modelo de dados com garantias no banco e o
-> simulador das 3 falhas estão prontos. As seções marcadas como _em construção_ chegam nas
-> próximas fases; veja o [roadmap](#roadmap).
+> **Status:** v0.4.0. Base do monorepo, modelo de dados com garantias no banco, simulador das
+> 3 falhas e ingestão idempotente de webhooks com fila estão prontos. As seções marcadas como
+> _em construção_ chegam nas próximas fases; veja o [roadmap](#roadmap).
 
 ## O problema
 
@@ -68,7 +68,10 @@ só é executada depois que uma pessoa aprova.
   e valores) e o gabarito dos casos que a conciliação deve abrir. Prova:
   [`apps/simulator/test/scenario.test.ts`](apps/simulator/test/scenario.test.ts),
   [`apps/api/test/simulate.test.ts`](apps/api/test/simulate.test.ts).
-- Idempotência da ingestão de webhooks: _em construção (fase 4)_.
+- **Idempotência garantida no banco.** O mesmo webhook 50 vezes em paralelo vira 1 linha,
+  1 job e 1 aplicação. O evento é gravado e enfileirado na mesma transação, e o worker só aplica
+  se ainda não aplicou. Prova: [`apps/api/test/ingestion.test.ts`](apps/api/test/ingestion.test.ts),
+  [seção Idempotência](#idempotência), [ADR 0004](docs/adr/0004-fila-no-postgres.md).
 - Ledger em partidas dobradas que sempre fecha em zero: _em construção (fase 5)_.
 - Conciliação validada contra o gabarito do simulador: _em construção (fase 6)_.
 - Agente só de leitura, com no máximo 8 rodadas e saída validada por schema: _em construção
@@ -171,23 +174,84 @@ O mesmo gerador roda pela api em `POST /simulate` (o botão "Gerar falhas" da in
 devolve a seed e o gabarito. Os IDs vêm da seed (`S1-0001`), então rodar a mesma seed de novo é
 um reenvio idempotente, não dados novos.
 
+## Idempotência
+
+Cada evento do gateway é aplicado **exatamente uma vez**, mesmo com cópias simultâneas, retries
+e quedas no meio do caminho. Quem garante isso é o banco: a fila e o código são otimização.
+
+```mermaid
+sequenceDiagram
+  participant G as Gateway
+  participant A as API
+  participant DB as Postgres
+  participant W as Worker
+  G->>A: POST /webhooks/gateway (X-Signature)
+  A->>A: HMAC em tempo constante (401 se inválido)
+  A->>DB: BEGIN
+  A->>DB: INSERT ... ON CONFLICT (event_id)<br/>DO UPDATE SET received_count = received_count + 1
+  alt evento novo (received_count = 1)
+    A->>DB: enfileira o job (pg-boss) na MESMA transação
+    A->>DB: COMMIT
+    A-->>G: 202 {duplicate: false}
+  else reenvio
+    A->>DB: COMMIT
+    A-->>G: 200 {duplicate: true}
+  end
+  W->>DB: BEGIN
+  W->>DB: UPDATE payment_events SET processed_at = now()<br/>WHERE id = $1 AND processed_at IS NULL
+  Note over W,DB: 0 linhas = já aplicado: sai sem efeito
+  W->>DB: pedido PENDING → PAID e ledger (fase 5)
+  W->>DB: COMMIT
+```
+
+| Camada         | Mecanismo                                                                    | O que impede                                                          |
+| -------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Ingestão       | `UNIQUE (event_id)` + `INSERT ... ON CONFLICT DO UPDATE` num único statement | Duas linhas para o mesmo evento, mesmo com 50 cópias em paralelo      |
+| Enfileiramento | Job criado dentro da transação do INSERT (`fromPrisma` do pg-boss)           | Evento gravado sem job (ou job sem evento) se o processo cair no meio |
+| Fila           | Policy `exclusive` + `singletonKey = eventId`                                | Dois jobs vivos para o mesmo evento                                   |
+| Aplicação      | `UPDATE ... WHERE processed_at IS NULL` na transação que aplica              | Aplicar duas vezes, mesmo com retry ou dois workers                   |
+
+Falhas na aplicação (o pedido ainda não chegou, o banco caiu) desfazem a transação inteira,
+inclusive o `processed_at`. O pg-boss tenta de novo com backoff exponencial (`QUEUE_RETRY_LIMIT`,
+padrão 5). Quando as tentativas acabam, o evento vai para a dead letter queue, consultável em
+`GET /admin/dlq`.
+
+Os testes que provam isso, contra um PostgreSQL real, estão em
+[`apps/api/test/ingestion.test.ts`](apps/api/test/ingestion.test.ts):
+
+- **O mesmo webhook 50 vezes em paralelo:** 1 linha com `received_count = 50`, um `202` e 49
+  respostas `200`, 1 job, 1 aplicação e o pedido `PAID`.
+- **Assinatura inválida, corpo alterado ou ausente:** `401`, nada gravado e nada enfileirado.
+- **Ledger que falha 2 vezes e depois funciona:** aplicado uma vez só.
+- **Pedido que nunca chega:** as tentativas se esgotam e o evento aparece em `/admin/dlq`.
+
+Com a api no ar, o simulador com metade dos pedidos duplicados (`--orders 100 --seed 4242
+--duplicate 0.5`) enviou 91 capturas e mais 115 cópias. No banco ficaram 91 eventos, cada um
+aplicado uma vez, 91 pedidos `PAID`, e os 9 `PENDING` são exatamente os pedidos perdidos do
+gabarito.
+
 ## Testes
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-São 37 testes hoje. Os 21 da api rodam contra um PostgreSQL real:
+São 44 testes hoje. Os 28 da api rodam contra um PostgreSQL real:
 
+- **Ingestão idempotente (7):** 50 webhooks iguais em paralelo, assinatura inválida ou ausente,
+  retry depois de 2 falhas, dead letter queue e duplicados do ERP e da loja.
 - **Garantias do banco (4):** `eventId` duplicado, dois casos abertos iguais (e o índice
   parcial deixando passar quando o anterior foi resolvido) e lançamento de ledger com valor 0.
-- **Webhooks e extrato (6):** evento traduzido para o modelo interno, reenvio ignorado, 400
+- **Webhooks e extrato (6):** evento traduzido para o modelo interno, reenvio com 200, 400
   com a lista de problemas, extrato com filtro e paginação.
 - **`POST /simulate` ponta a ponta (5):** o banco bate com o gabarito e a mesma seed de novo
   não grava nada novo.
 - **API (2):** o contrato do `/health` e o OpenAPI publicado em `/docs`.
 - **Env (4):** padrões, erro legível, `DATABASE_URL` que não é Postgres e `WEBHOOK_SECRET` em
   produção.
+
+Os testes de fila esperam retries reais (alguns segundos cada). Para isso, rodam com
+`QUEUE_RETRY_LIMIT=2`, `QUEUE_RETRY_DELAY_SECONDS=1` e polling de 0,5s.
 
 Os 16 do simulador cobrem o determinismo (mesma seed, mesmo cenário), o efeito de cada falha,
 o gabarito, os contratos dos payloads, a ordem dos envios e a assinatura HMAC.
@@ -276,12 +340,16 @@ sistema externo e não faz parte do modelo do Reconcilia.
 - [ADR 0001: monorepo com pnpm workspaces](docs/adr/0001-monorepo-pnpm.md)
 - [ADR 0002: garantias no banco](docs/adr/0002-garantias-no-banco.md)
 - [ADR 0003: simulador e sistemas externos](docs/adr/0003-simulador-e-sistemas-externos.md)
+- [ADR 0004: fila no Postgres](docs/adr/0004-fila-no-postgres.md)
 
 ## Limitações conhecidas
 
-- Até a v0.4.0 os webhooks só gravam o evento bruto: a assinatura `X-Signature` é enviada mas
-  ainda não é verificada, e um reenvio é apenas ignorado (sem contar `received_count` nem fila).
-  Ainda não há conciliação nem agente.
+- O ledger ainda é um ponto de extensão sem efeito (fase 5). Ainda não há conciliação nem
+  agente.
+- A assinatura dos webhooks não tem proteção contra replay (timestamp no header): um corpo
+  assinado capturado poderia ser reenviado. Reenviar é inofensivo aqui, porque a ingestão é
+  idempotente, mas um gateway real deveria mandar um timestamp assinado.
+- `GET /admin/dlq` não tem autenticação; a proteção da demo pública entra na fase 10.
 - O gateway, a loja e o ERP são simulados. O extrato do gateway mora numa tabela do próprio
   banco (`sim_gateway_statement`), no lugar da API de conciliação de um gateway real.
 - O índice único parcial usa o preview feature `partialIndexes` do Prisma 7. Se ele mudar numa
@@ -296,7 +364,7 @@ sistema externo e não faz parte do modelo do Reconcilia.
 | v0.1.0 | Monorepo, CI, README inicial                 | ✅     |
 | v0.2.0 | Modelo de dados com garantias no banco       | ✅     |
 | v0.3.0 | Gerador de tráfego e das 3 falhas            | ✅     |
-| v0.4.0 | Webhooks idempotentes + fila                 | 🚧     |
+| v0.4.0 | Webhooks idempotentes + fila                 | ✅     |
 | v0.5.0 | Partidas dobradas                            | 🚧     |
 | v0.6.0 | Detecção de divergências                     | 🚧     |
 | v0.7.0 | Agente de IA investigador                    | 🚧     |

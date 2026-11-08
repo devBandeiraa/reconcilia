@@ -8,9 +8,17 @@ import { addWebhookSignature } from './common/openapi-security.js';
 import type { Env } from './config/env.js';
 import { API_VERSION } from './version.js';
 
-/** Monta a aplicação sem abrir porta. Usado pelo main.ts e pelos testes. */
+/** rawBody: a assinatura HMAC dos webhooks é conferida sobre o corpo exato que chegou. */
+export const APP_OPTIONS = { bufferLogs: true, rawBody: true } as const;
+
+/** Monta a aplicação sem abrir porta. Usado pelo main.ts. */
 export async function createApp(env: Env): Promise<INestApplication> {
-  const app = await NestFactory.create(AppModule.forRoot(env), { bufferLogs: true });
+  const app = await NestFactory.create(AppModule.forRoot(env), APP_OPTIONS);
+  return setupApp(app);
+}
+
+/** Logger, shutdown e Swagger. Separado para os testes montarem o app com providers trocados. */
+export function setupApp(app: INestApplication): INestApplication {
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();
 

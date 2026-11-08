@@ -10,5 +10,8 @@ export default defineConfig({
     globalSetup: ['test/support/global-setup.ts'],
     // Os testes de banco compartilham o reconcilia_test e esvaziam as tabelas: um arquivo por vez.
     fileParallelism: false,
+    // Testes de fila esperam retries reais com backoff (alguns segundos).
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });
