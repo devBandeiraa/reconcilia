@@ -17,6 +17,6 @@ import { ReconciliationService } from './reconciliation.service.js';
     CasesService,
     ReconciliationScheduler,
   ],
-  exports: [ReconciliationService],
+  exports: [ReconciliationService, GATEWAY_STATEMENT_SOURCE],
 })
 export class ReconciliationModule {}

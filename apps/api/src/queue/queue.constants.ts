@@ -12,3 +12,10 @@ export interface PaymentEventJob {
 
 /** Conciliação agendada. Policy `singleton`: no máximo uma rodada ativa por vez. */
 export const RECONCILIATION_QUEUE = 'reconciliation';
+
+/** Investigações do agente. Sem retry: falha vira status FAILED com o motivo. */
+export const INVESTIGATIONS_QUEUE = 'investigations';
+
+export interface InvestigationJob {
+  investigationId: string;
+}
