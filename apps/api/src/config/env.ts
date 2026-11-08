@@ -44,6 +44,12 @@ export const EnvSchema = z
     ),
     /** Modelo do Gemini. 3.5-flash respondeu de forma estável no aceite; o 3.8 deu 503/504. */
     GEMINI_MODEL: z.string().min(1).default('gemini-3.5-flash'),
+    /** Origens que podem chamar a api pelo navegador (a web), separadas por vírgula. */
+    CORS_ORIGIN: z
+      .string()
+      .default('http://localhost:3000')
+      .transform((value) => value.split(',').map((origin) => origin.trim()))
+      .pipe(z.array(z.url()).min(1)),
     /** Fuso da loja: só para exibir horários locais; no banco tudo é UTC. */
     STORE_TIMEZONE: z
       .string()

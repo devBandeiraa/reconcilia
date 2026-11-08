@@ -12,13 +12,13 @@ Demo ao vivo (em construção) · Vídeo de 1 min (em construção) · Documenta
 [![licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.base.json)
 
-<!-- GIF do fluxo completo: chega na fase 9 (docs/img/fluxo.gif) -->
+![Fluxo completo: gerar falhas, conciliar, investigar com o agente e aprovar](docs/img/fluxo.gif)
 
 </div>
 
-> **Status:** v0.8.0. O backend está completo: simulador, ingestão idempotente, ledger,
-> conciliação, agente de IA e aprovação humana com execução idempotente e auditoria. Faltam as
-> telas (fase 9) e o deploy (fase 10); veja o [roadmap](#roadmap).
+> **Status:** v0.9.0. Backend e interface completos: simulador, ingestão idempotente, ledger,
+> conciliação, agente de IA, aprovação humana com auditoria e as telas em Next.js. Falta o
+> deploy (fase 10); veja o [roadmap](#roadmap).
 
 ## O problema
 
@@ -30,8 +30,6 @@ pendente), o webhook que chega **duplicado** (risco de baixar o pagamento duas v
 mais de 15 incidentes por semana em 5 lojas, investigados um a um, na mão.
 
 ## Como funciona
-
-_Em construção._ O fluxo planejado:
 
 ```mermaid
 flowchart LR
@@ -108,7 +106,7 @@ só é executada depois que uma pessoa aprova.
 | Contratos    | Zod 4                                | Um schema gera o tipo, a validação e o OpenAPI                                                 | Sem custo                    |
 | Banco        | PostgreSQL 17 + Prisma 7             | Garantias no banco ([ADR 0002](docs/adr/0002-garantias-no-banco.md)); fila no próprio Postgres | Neon (em construção)         |
 | Testes       | Vitest + Supertest                   | Rápidos, com banco real via Docker Compose                                                     | Sem custo                    |
-| IA           | Gemini (`@google/genai`)             | Plano gratuito, atrás da interface `LlmClient`                                                 | Em construção (fase 7)       |
+| IA           | Gemini (`@google/genai`)             | Plano gratuito, atrás da interface `LlmClient`                                                 | Cota baixa; modo demo padrão |
 
 ## Rodando localmente
 
@@ -140,7 +138,9 @@ nada, use `pnpm --filter @reconcilia/api db:migrate`.
 
 As variáveis de ambiente têm padrão para desenvolvimento local. Para mudar, copie
 [`apps/api/.env.example`](apps/api/.env.example) para `apps/api/.env` e
-[`apps/web/.env.example`](apps/web/.env.example) para `apps/web/.env.local`.
+[`apps/web/.env.example`](apps/web/.env.example) para `apps/web/.env.local`. A web chama a api
+direto do navegador: `NEXT_PUBLIC_API_URL` (web) aponta para a api, e `CORS_ORIGIN` (api) precisa
+listar a origem da web ([ADR 0009](docs/adr/0009-web-chama-a-api-direto.md)).
 
 O agente de IA roda por padrão em **modo demonstração** (`DEMO_REPLAY=true`): sem chave, sem
 custo e sem chamar o Gemini. Para usar o Gemini de verdade, crie uma chave gratuita no Google AI
@@ -466,6 +466,31 @@ Histórico do caso S5005-0006:
   RESOLVED       Resolvido
 ```
 
+## Interface
+
+Abra http://localhost:3000 com `pnpm dev` rodando. O caminho da demo cabe em um minuto:
+
+1. **Casos:** "Gerar falhas" manda 30 pedidos com problemas pelo simulador, e "Conciliar agora"
+   abre os casos. Os contadores por tipo filtram a lista.
+2. **Caso:** loja, gateway (com o extrato) e ERP lado a lado, e a linha do tempo com os
+   duplicados em âmbar. Os horários alternam entre UTC e o fuso da loja.
+3. **Agente:** "Investigar" mostra os passos enquanto o agente consulta os três lados, depois o
+   diagnóstico, as evidências, a confiança e a ação sugerida.
+4. **Decisão:** com o seu nome, "Aprovar" faz o backend executar e o caso fica resolvido;
+   "Recusar" pede um motivo e mantém o caso aberto.
+5. **Saúde:** saldo do ledger por conta (o total é zero), fila de mortos e status da api.
+
+| Casos                                          | Caso, agente e aprovação                      |
+| ---------------------------------------------- | --------------------------------------------- |
+| ![Lista de casos](docs/img/casos.png)          | ![Detalhe do caso](docs/img/caso.png)         |
+| **Saúde**                                      | **No celular**                                |
+| ![Ledger e fila de mortos](docs/img/saude.png) | ![Caso no celular](docs/img/caso-celular.png) |
+
+Toda resposta da api é validada com os schemas de `packages/shared`. Se a api demora mais de 3
+segundos (no plano gratuito ela dorme), a tela avisa "Acordando o servidor…" e tenta de novo
+sozinha por até 90 segundos. Os campos têm rótulo, o foco é visível, as mensagens de resultado
+são lidas pelo leitor de tela e a cor nunca é a única pista: todo selo tem texto.
+
 ## Testes
 
 ```bash
@@ -619,6 +644,7 @@ sistema externo e não faz parte do modelo do Reconcilia.
 - [ADR 0006: conciliação](docs/adr/0006-conciliacao.md)
 - [ADR 0007: agente somente leitura](docs/adr/0007-agente-somente-leitura.md)
 - [ADR 0008: aprovação e auditoria](docs/adr/0008-aprovacao-e-auditoria.md)
+- [ADR 0009: a web chama a api direto](docs/adr/0009-web-chama-a-api-direto.md)
 
 ## Limitações conhecidas
 
@@ -639,6 +665,9 @@ sistema externo e não faz parte do modelo do Reconcilia.
   assinado capturado poderia ser reenviado. Reenviar é inofensivo aqui, porque a ingestão é
   idempotente, mas um gateway real deveria mandar um timestamp assinado.
 - `GET /admin/dlq` não tem autenticação; a proteção da demo pública entra na fase 10.
+- A interface não tem testes automatizados de tela; foi conferida no navegador (desktop e
+  celular), com o fluxo completo de ponta a ponta.
+- `NEXT_PUBLIC_API_URL` é embutida no build da web: trocar a api exige um novo build.
 - O gateway, a loja e o ERP são simulados. O extrato do gateway mora numa tabela do próprio
   banco (`sim_gateway_statement`), no lugar da API de conciliação de um gateway real.
 - O índice único parcial usa o preview feature `partialIndexes` do Prisma 7. Se ele mudar numa
@@ -658,7 +687,7 @@ sistema externo e não faz parte do modelo do Reconcilia.
 | v0.6.0 | Detecção de divergências                     | ✅     |
 | v0.7.0 | Agente de IA investigador                    | ✅     |
 | v0.8.0 | Aprovação humana e execução                  | ✅     |
-| v0.9.0 | Telas em Next.js                             | 🚧     |
+| v0.9.0 | Telas em Next.js                             | ✅     |
 | v1.0.0 | No ar + README final                         | 🚧     |
 | v1.1.0 | RAG com casos parecidos e runbook (opcional) | 🚧     |
 
