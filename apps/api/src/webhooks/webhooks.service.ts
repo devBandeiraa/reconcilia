@@ -6,8 +6,11 @@ import type {
   GatewayWebhook,
   StoreWebhook,
 } from '@reconcilia/shared';
+import { fromPrisma } from 'pg-boss';
 import { ErpEventType, PaymentEventType } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PAYMENT_EVENTS_QUEUE, type PaymentEventJob } from '../queue/queue.constants.js';
+import { QueueService } from '../queue/queue.service.js';
 
 const GATEWAY_TYPES: Record<GatewayEventType, PaymentEventType> = {
   'charge.authorized': PaymentEventType.AUTHORIZED,
@@ -21,27 +24,37 @@ const ERP_TYPES: Record<ExternalErpType, ErpEventType> = {
   'adjustment.recorded': ErpEventType.ADJUSTMENT,
 };
 
+export interface IngestResult {
+  duplicate: boolean;
+}
+
 /**
- * Grava os eventos brutos traduzidos para o modelo interno. Até a v0.4.0, um reenvio é só
- * ignorado (ON CONFLICT DO NOTHING via skipDuplicates); a contagem de reenvios e a fila chegam
- * na fase 4.
+ * Ingestão idempotente. O upsert vira um único `INSERT ... ON CONFLICT (event_id) DO UPDATE SET
+ * received_count = received_count + 1` (upsert nativo do Prisma): com N cópias em paralelo, o
+ * Postgres serializa pelo lock da linha e só uma vê received_count = 1, ou seja, só uma é nova.
  */
 @Injectable()
 export class WebhooksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly queue: QueueService,
+  ) {}
 
-  async receiveStore(event: StoreWebhook): Promise<void> {
+  async receiveStore(event: StoreWebhook): Promise<IngestResult> {
     const { externalId, totalCents, installments } = event.order;
-    await this.prisma.order.createMany({
+    const { count } = await this.prisma.order.createMany({
       data: [{ externalId, totalCents, installments }],
       skipDuplicates: true,
     });
+    return { duplicate: count === 0 };
   }
 
-  async receiveGateway(event: GatewayWebhook): Promise<void> {
-    await this.prisma.paymentEvent.createMany({
-      data: [
-        {
+  /** Grava e enfileira na MESMA transação: nunca sobra evento sem job nem job sem evento. */
+  receiveGateway(event: GatewayWebhook): Promise<IngestResult> {
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.paymentEvent.upsert({
+        where: { eventId: event.id },
+        create: {
           provider: event.provider,
           eventId: event.id,
           orderExternalId: event.data.orderReference,
@@ -49,23 +62,39 @@ export class WebhooksService {
           amountCents: event.data.amountCents,
           payload: event,
         },
-      ],
-      skipDuplicates: true,
+        update: { receivedCount: { increment: 1 } },
+        select: { id: true, receivedCount: true },
+      });
+      if (row.receivedCount > 1) return { duplicate: true };
+
+      const job: PaymentEventJob = {
+        paymentEventId: row.id,
+        eventId: event.id,
+        orderExternalId: event.data.orderReference,
+      };
+      await this.queue.boss.send(PAYMENT_EVENTS_QUEUE, job, {
+        ...this.queue.paymentEventJobOptions(),
+        singletonKey: event.id,
+        db: fromPrisma(tx),
+      });
+      return { duplicate: false };
     });
   }
 
-  async receiveErp(event: ErpWebhook): Promise<void> {
-    await this.prisma.erpEvent.createMany({
-      data: [
-        {
-          eventId: event.id,
-          orderExternalId: event.orderReference,
-          type: ERP_TYPES[event.type],
-          amountCents: event.amountCents,
-          payload: event,
-        },
-      ],
-      skipDuplicates: true,
+  /** Mesma ingestão idempotente. Sem fila: evento do ERP não muda estado, a conciliação só lê. */
+  async receiveErp(event: ErpWebhook): Promise<IngestResult> {
+    const row = await this.prisma.erpEvent.upsert({
+      where: { eventId: event.id },
+      create: {
+        eventId: event.id,
+        orderExternalId: event.orderReference,
+        type: ERP_TYPES[event.type],
+        amountCents: event.amountCents,
+        payload: event,
+      },
+      update: { receivedCount: { increment: 1 } },
+      select: { receivedCount: true },
     });
+    return { duplicate: row.receivedCount > 1 };
   }
 }
