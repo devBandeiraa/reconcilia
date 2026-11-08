@@ -13,6 +13,7 @@ describe('loadEnv', () => {
       QUEUE_RETRY_LIMIT: 5,
       QUEUE_RETRY_DELAY_SECONDS: 2,
       QUEUE_POLLING_SECONDS: 2,
+      RECONCILIATION_CRON: '*/5 * * * *',
     });
   });
 
