@@ -1,4 +1,13 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -8,6 +17,7 @@ import {
   ApiQuery,
   ApiSecurity,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import {
   type GatewayStatementPage,
@@ -16,12 +26,13 @@ import {
   GatewayStatementQuerySchema,
   type GatewayStatementUpload,
   GatewayStatementUploadSchema,
-  type WebhookAck,
-  WebhookAckSchema,
+  type StatementAck,
+  StatementAckSchema,
 } from '@reconcilia/shared';
 import { toOpenApiSchema } from '../common/openapi.js';
 import { WEBHOOK_SIGNATURE } from '../common/openapi-security.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import { WebhookSignatureGuard } from '../webhooks/webhook-signature.guard.js';
 import { GatewayStatementService } from './gateway-statement.service.js';
 
 @ApiTags('simulador')
@@ -33,6 +44,8 @@ export class GatewayStatementController {
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiSecurity(WEBHOOK_SIGNATURE)
+  @UseGuards(WebhookSignatureGuard)
+  @ApiUnauthorizedResponse({ description: 'X-Signature ausente ou inválida; nada é gravado' })
   @ApiOperation({
     summary: 'Publica linhas do extrato do gateway simulado',
     description: 'Idempotente por chargeId: reenviar a mesma linha não duplica o extrato.',
@@ -40,11 +53,11 @@ export class GatewayStatementController {
   @ApiBody({ schema: toOpenApiSchema(GatewayStatementUploadSchema) })
   @ApiAcceptedResponse({
     description: 'Linhas recebidas',
-    schema: toOpenApiSchema(WebhookAckSchema),
+    schema: toOpenApiSchema(StatementAckSchema),
   })
   async upload(
     @Body(new ZodValidationPipe(GatewayStatementUploadSchema)) body: GatewayStatementUpload,
-  ): Promise<WebhookAck> {
+  ): Promise<StatementAck> {
     await this.statement.upload(body.entries);
     return { received: true };
   }
