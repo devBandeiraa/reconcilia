@@ -3,7 +3,11 @@ import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
 import { PgBoss, type Queue, type SendOptions } from 'pg-boss';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
-import { PAYMENT_EVENTS_DLQ, PAYMENT_EVENTS_QUEUE } from './queue.constants.js';
+import {
+  PAYMENT_EVENTS_DLQ,
+  PAYMENT_EVENTS_QUEUE,
+  RECONCILIATION_QUEUE,
+} from './queue.constants.js';
 
 /**
  * pg-boss no próprio Postgres (schema `pgboss`), no mesmo processo da api. A fila é otimização:
@@ -17,7 +21,12 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     @Inject(ENV) private readonly env: Env,
     @InjectPinoLogger(QueueService.name) private readonly logger: PinoLogger,
   ) {
-    this.boss = new PgBoss({ connectionString: env.DATABASE_URL, schema: 'pgboss' });
+    this.boss = new PgBoss({
+      connectionString: env.DATABASE_URL,
+      schema: 'pgboss',
+      // Com o agendamento desligado (testes), esta instância não dispara jobs de cron.
+      schedule: env.RECONCILIATION_CRON !== 'off',
+    });
     this.boss.on('error', (error) => this.logger.error({ err: error }, 'pg-boss: erro interno'));
   }
 
@@ -29,6 +38,7 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
       policy: 'exclusive',
       deadLetter: PAYMENT_EVENTS_DLQ,
     });
+    await this.ensureQueue({ name: RECONCILIATION_QUEUE, policy: 'singleton' });
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -46,7 +56,7 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private async ensureQueue({ name, ...options }: Queue): Promise<void> {
+  async ensureQueue({ name, ...options }: Queue): Promise<void> {
     if (!(await this.boss.getQueue(name))) await this.boss.createQueue(name, options);
   }
 }
