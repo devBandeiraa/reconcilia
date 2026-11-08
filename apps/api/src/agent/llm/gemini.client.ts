@@ -9,6 +9,21 @@ import {
 } from './llm-client.js';
 
 /**
+ * Retry do SDK, explícito. O padrão dele é 5 tentativas com espera de até 60s, inclusive no 429:
+ * uma cota esgotada deixaria a investigação minutos em RUNNING. Aqui só erros transitórios do
+ * servidor (5xx) são tentados de novo, com espera curta; 429 falha na hora, com o motivo.
+ */
+const HTTP_OPTIONS = {
+  timeout: 60_000,
+  retryOptions: {
+    attempts: 3,
+    initialDelay: 1,
+    maxDelay: 8,
+    httpStatusCodes: [500, 502, 503, 504],
+  },
+};
+
+/**
  * Gemini via SDK oficial. Function calling em modo ANY: o modelo sempre responde chamando uma
  * ferramenta (as de leitura ou o submitDiagnosis), nunca com texto solto.
  */
@@ -20,7 +35,7 @@ export class GeminiClient implements LlmClient {
     apiKey: string,
     private readonly model: string,
   ) {
-    this.ai = new GoogleGenAI({ apiKey });
+    this.ai = new GoogleGenAI({ apiKey, httpOptions: HTTP_OPTIONS });
   }
 
   async next(request: LlmRequest): Promise<LlmTurn> {
