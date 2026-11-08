@@ -9,3 +9,6 @@ export interface PaymentEventJob {
   eventId: string;
   orderExternalId: string;
 }
+
+/** Conciliação agendada. Policy `singleton`: no máximo uma rodada ativa por vez. */
+export const RECONCILIATION_QUEUE = 'reconciliation';

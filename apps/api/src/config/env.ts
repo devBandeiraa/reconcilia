@@ -21,6 +21,11 @@ export const EnvSchema = z
     QUEUE_RETRY_DELAY_SECONDS: z.coerce.number().int().min(1).max(60).default(2),
     /** Intervalo de polling do worker. */
     QUEUE_POLLING_SECONDS: z.coerce.number().min(0.5).max(60).default(2),
+    /** Cron (UTC) da conciliação agendada; `off` desliga (usado nos testes). */
+    RECONCILIATION_CRON: z
+      .string()
+      .regex(/^(off|\S+(\s+\S+){4})$/, 'cron de 5 campos ou off')
+      .default('*/5 * * * *'),
   })
   .superRefine((env, ctx) => {
     if (

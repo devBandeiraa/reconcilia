@@ -6,6 +6,7 @@ import { HealthController } from './health/health.controller.js';
 import { LedgerModule } from './ledger/ledger.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { ReconciliationModule } from './reconciliation/reconciliation.module.js';
 import { QueueModule } from './queue/queue.module.js';
 import { SimulationModule } from './simulation/simulation.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
@@ -31,6 +32,7 @@ export class AppModule {
         LedgerModule,
         WebhooksModule,
         PaymentsModule,
+        ReconciliationModule,
         SimulationModule,
       ],
       controllers: [HealthController],
