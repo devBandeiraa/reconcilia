@@ -16,9 +16,10 @@ export class OrderNotFoundYetError extends Error {
 /**
  * Aplica um evento do gateway exatamente uma vez. Tudo numa transação:
  * 1. UPDATE ... SET processed_at WHERE processed_at IS NULL: 0 linhas = já aplicado, sai sem efeito.
- * 2. CAPTURED: pedido PENDING → PAID.
- * 3. Ledger (no-op até a fase 5).
- * Qualquer erro desfaz tudo, inclusive o processed_at.
+ * 2. CAPTURED: pedido PENDING → PAID e lançamento da captura no ledger.
+ *    REFUNDED: lançamento do estorno no ledger. AUTHORIZED: não move dinheiro.
+ * Qualquer erro desfaz tudo, inclusive o processed_at. O transactionId do ledger vem do eventId,
+ * então mesmo um reprocessamento não duplica lançamentos.
  */
 @Injectable()
 export class PaymentEventProcessor {
@@ -36,6 +37,16 @@ export class PaymentEventProcessor {
       if (claimed.count === 0) return 'already-applied';
 
       const event = await tx.paymentEvent.findUniqueOrThrow({ where: { id: paymentEventId } });
+      const movement = (kind: string) => ({
+        transactionId: `${kind}:${event.eventId}`,
+        orderExternalId: event.orderExternalId,
+        amountCents: event.amountCents,
+      });
+
+      if (event.type === PaymentEventType.REFUNDED) {
+        await this.ledger.recordRefund(tx, movement('refund'));
+        return 'applied';
+      }
       if (event.type !== PaymentEventType.CAPTURED) return 'applied';
 
       const paid = await tx.order.updateMany({
@@ -50,11 +61,7 @@ export class PaymentEventProcessor {
         if (!order) throw new OrderNotFoundYetError(event.orderExternalId);
       }
 
-      await this.ledger.recordCapture(tx, {
-        transactionId: `capture:${event.eventId}`,
-        orderExternalId: event.orderExternalId,
-        amountCents: event.amountCents,
-      });
+      await this.ledger.recordCapture(tx, movement('capture'));
       return 'applied';
     });
   }
