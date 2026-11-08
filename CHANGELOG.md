@@ -7,6 +7,28 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.5.0] - 2026-11-08
+
+### Adicionado
+
+- Ledger em partidas dobradas: `LedgerService.post(tx, transactionId, lançamentos, descrição)`
+  exige 2+ lançamentos, centavos inteiros positivos e débitos = créditos; senão lança
+  `LedgerUnbalancedError` antes de gravar.
+- Tabela `ledger_transactions` (`transaction_id` como PK): postar a mesma transação de novo
+  devolve `already-posted` sem gravar lançamentos.
+- Garantias no banco: trigger diferido que confere no COMMIT a soma zero e os 2+ lançamentos por
+  transação, e triggers que tornam o ledger append-only (UPDATE e DELETE recusados).
+- Worker lança a captura (débito `GATEWAY_RECEIVABLE` / crédito `ORDER_REVENUE`) e o estorno
+  (débito `REFUNDS` / crédito `GATEWAY_RECEIVABLE`) na mesma transação que aplica o evento, com
+  `transactionId` derivado do `eventId`.
+- `GET /ledger/balance`: débitos, créditos e saldo por conta e o total (sempre 0), lidos num
+  snapshot `REPEATABLE READ`.
+- Seção "Ledger" no README e ADR 0005.
+
+### Alterado
+
+- O `LedgerService` substitui o ledger no-op da v0.4.0.
+
 ## [0.4.0] - 2026-11-07
 
 ### Adicionado
@@ -106,7 +128,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
   formulários de issue.
 - ADR 0001: monorepo com pnpm workspaces.
 
-[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.4.0...HEAD
+[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.1.0...v0.2.0

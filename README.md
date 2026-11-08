@@ -16,9 +16,10 @@ Demo ao vivo (em construção) · Vídeo de 1 min (em construção) · Documenta
 
 </div>
 
-> **Status:** v0.4.0. Base do monorepo, modelo de dados com garantias no banco, simulador das
-> 3 falhas e ingestão idempotente de webhooks com fila estão prontos. As seções marcadas como
-> _em construção_ chegam nas próximas fases; veja o [roadmap](#roadmap).
+> **Status:** v0.5.0. Base do monorepo, modelo de dados com garantias no banco, simulador das
+> 3 falhas, ingestão idempotente de webhooks com fila e ledger em partidas dobradas estão
+> prontos. As seções marcadas como _em construção_ chegam nas próximas fases; veja o
+> [roadmap](#roadmap).
 
 ## O problema
 
@@ -72,7 +73,11 @@ só é executada depois que uma pessoa aprova.
   1 job e 1 aplicação. O evento é gravado e enfileirado na mesma transação, e o worker só aplica
   se ainda não aplicou. Prova: [`apps/api/test/ingestion.test.ts`](apps/api/test/ingestion.test.ts),
   [seção Idempotência](#idempotência), [ADR 0004](docs/adr/0004-fila-no-postgres.md).
-- Ledger em partidas dobradas que sempre fecha em zero: _em construção (fase 5)_.
+- **Ledger em partidas dobradas que sempre fecha em zero, garantido pelo banco.** Um trigger
+  confere no COMMIT que cada transação soma zero, o ledger é append-only e o `transactionId`
+  derivado do evento impede lançamento em dobro. Prova:
+  [`apps/api/test/ledger.test.ts`](apps/api/test/ledger.test.ts), [seção Ledger](#ledger),
+  [ADR 0005](docs/adr/0005-ledger-partidas-dobradas.md).
 - Conciliação validada contra o gabarito do simulador: _em construção (fase 6)_.
 - Agente só de leitura, com no máximo 8 rodadas e saída validada por schema: _em construção
   (fase 7)_.
@@ -200,7 +205,7 @@ sequenceDiagram
   W->>DB: BEGIN
   W->>DB: UPDATE payment_events SET processed_at = now()<br/>WHERE id = $1 AND processed_at IS NULL
   Note over W,DB: 0 linhas = já aplicado: sai sem efeito
-  W->>DB: pedido PENDING → PAID e ledger (fase 5)
+  W->>DB: pedido PENDING → PAID e lançamento no ledger
   W->>DB: COMMIT
 ```
 
@@ -230,14 +235,66 @@ Com a api no ar, o simulador com metade dos pedidos duplicados (`--orders 100 --
 aplicado uma vez, 91 pedidos `PAID`, e os 9 `PENDING` são exatamente os pedidos perdidos do
 gabarito.
 
+## Ledger
+
+Todo movimento de dinheiro vira uma transação em partidas dobradas: um cabeçalho
+(`ledger_transactions`) e pelo menos dois lançamentos (`ledger_entries`). Os lançamentos são
+sempre positivos, e a direção (débito ou crédito) dá o sinal.
+
+| Movimento                   | Débito               | Crédito              | `transactionId`     |
+| --------------------------- | -------------------- | -------------------- | ------------------- |
+| Captura (`charge.captured`) | `GATEWAY_RECEIVABLE` | `ORDER_REVENUE`      | `capture:<eventId>` |
+| Estorno (`charge.refunded`) | `REFUNDS`            | `GATEWAY_RECEIVABLE` | `refund:<eventId>`  |
+
+- **`GATEWAY_RECEIVABLE`:** o que o gateway nos deve.
+- **`ORDER_REVENUE`:** a receita dos pedidos.
+- **`REFUNDS`:** conta redutora da receita.
+- **`ERP_ADJUSTMENTS`:** fica reservada para os ajustes da fase 8.
+
+O worker lança no ledger **dentro da mesma transação** que marca o evento como aplicado: se o
+ledger falhar, nada é aplicado e o job é tentado de novo.
+
+| Garantia                           | Quem garante                                                                                              |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Débitos = créditos, 2+ lançamentos | `LedgerService.post` valida antes de gravar; um trigger `DEFERRABLE INITIALLY DEFERRED` confere no COMMIT |
+| Valor positivo                     | `CHECK (amount_cents > 0)`                                                                                |
+| Sem lançamento em dobro            | `transaction_id` é PK de `ledger_transactions`, e o id vem do evento                                      |
+| Histórico imutável                 | Triggers recusam UPDATE e DELETE: correção é um lançamento de estorno                                     |
+
+```bash
+curl localhost:3001/ledger/balance
+```
+
+Esse endpoint devolve débitos, créditos e saldo (débitos - créditos) de cada conta, e o total,
+que precisa ser **sempre 0**. Com a api no ar, o simulador com 100 pedidos e 30% de duplicados
+(`--seed 5005 --duplicate 0.3`) gerou 90 capturas e mais 65 cópias. O resultado foi:
+
+```
+GATEWAY_RECEIVABLE   D   4324570 C         0 saldo    4324570
+ORDER_REVENUE        D         0 C   4324570 saldo   -4324570
+REFUNDS              D         0 C         0 saldo          0
+ERP_ADJUSTMENTS      D         0 C         0 saldo          0
+totalCents = 0 | transações 90 | lançamentos 180
+```
+
+O a receber (R$ 43.245,70) é exatamente a soma das 90 capturas aplicadas.
+
 ## Testes
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-São 44 testes hoje. Os 28 da api rodam contra um PostgreSQL real:
+São 54 testes hoje. Os 38 da api rodam contra um PostgreSQL real:
 
+- **Ledger (10):**
+  - Transação desbalanceada, com um só lançamento ou com valor 0 dá erro e não grava nada.
+  - O mesmo `transactionId` postado de novo não duplica.
+  - Por fora do serviço, em SQL puro, um INSERT desbalanceado falha no COMMIT, e UPDATE e
+    DELETE são recusados.
+  - Captura e estorno lançados pelo worker deixam o total em 0.
+  - Reprocessar um evento não duplica lançamentos.
+  - Depois do simulador completo, o total é 0.
 - **Ingestão idempotente (7):** 50 webhooks iguais em paralelo, assinatura inválida ou ausente,
   retry depois de 2 falhas, dead letter queue e duplicados do ERP e da loja.
 - **Garantias do banco (4):** `eventId` duplicado, dois casos abertos iguais (e o índice
@@ -341,11 +398,15 @@ sistema externo e não faz parte do modelo do Reconcilia.
 - [ADR 0002: garantias no banco](docs/adr/0002-garantias-no-banco.md)
 - [ADR 0003: simulador e sistemas externos](docs/adr/0003-simulador-e-sistemas-externos.md)
 - [ADR 0004: fila no Postgres](docs/adr/0004-fila-no-postgres.md)
+- [ADR 0005: ledger em partidas dobradas](docs/adr/0005-ledger-partidas-dobradas.md)
 
 ## Limitações conhecidas
 
-- O ledger ainda é um ponto de extensão sem efeito (fase 5). Ainda não há conciliação nem
-  agente.
+- Ainda não há conciliação nem agente.
+- O ledger registra só o lado do gateway (captura e estorno). Liquidação (o dinheiro saindo do
+  gateway para a conta da loja), taxas e os ajustes do ERP ficam fora por enquanto.
+- Pedidos marcados como pagos antes da v0.5.0 não têm lançamento: o ledger começou a registrar
+  nesta versão. Num banco novo (`pnpm db:reset`), tudo passa pelo ledger.
 - A assinatura dos webhooks não tem proteção contra replay (timestamp no header): um corpo
   assinado capturado poderia ser reenviado. Reenviar é inofensivo aqui, porque a ingestão é
   idempotente, mas um gateway real deveria mandar um timestamp assinado.
@@ -365,7 +426,7 @@ sistema externo e não faz parte do modelo do Reconcilia.
 | v0.2.0 | Modelo de dados com garantias no banco       | ✅     |
 | v0.3.0 | Gerador de tráfego e das 3 falhas            | ✅     |
 | v0.4.0 | Webhooks idempotentes + fila                 | ✅     |
-| v0.5.0 | Partidas dobradas                            | 🚧     |
+| v0.5.0 | Partidas dobradas                            | ✅     |
 | v0.6.0 | Detecção de divergências                     | 🚧     |
 | v0.7.0 | Agente de IA investigador                    | 🚧     |
 | v0.8.0 | Aprovação humana e execução                  | 🚧     |
