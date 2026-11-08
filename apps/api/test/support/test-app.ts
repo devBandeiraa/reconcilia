@@ -15,11 +15,13 @@ import { TEST_DATABASE_URL } from './test-db.js';
 export interface TestAppOptions {
   /** Troca o ledger (ex.: um que conta chamadas ou falha de propósito). */
   ledger?: LedgerPort;
+  /** Variáveis de ambiente extras (ex.: RECONCILIATION_CRON para o teste do agendamento). */
+  env?: Record<string, string>;
 }
 
 /**
  * App completo contra o banco de teste, sem logs. Retry rápido para os testes de fila:
- * 2 tentativas extras com 1s de atraso base e polling de 0,5s.
+ * 2 tentativas extras com 1s de atraso base e polling de 0,5s. Conciliação agendada desligada.
  */
 export async function createTestApp(options: TestAppOptions = {}): Promise<INestApplication> {
   const env = loadEnv({
@@ -29,6 +31,9 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<INest
     QUEUE_RETRY_LIMIT: '2',
     QUEUE_RETRY_DELAY_SECONDS: '1',
     QUEUE_POLLING_SECONDS: '0.5',
+    // Sem conciliação agendada: ela rodaria no meio dos outros testes.
+    RECONCILIATION_CRON: 'off',
+    ...options.env,
   });
   let builder = Test.createTestingModule({ imports: [AppModule.forRoot(env)] });
   if (options.ledger) builder = builder.overrideProvider(LEDGER).useValue(options.ledger);
