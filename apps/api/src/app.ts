@@ -5,6 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
 import { addWebhookSignature } from './common/openapi-security.js';
+import { ENV } from './config/config.module.js';
 import type { Env } from './config/env.js';
 import { API_VERSION } from './version.js';
 
@@ -21,6 +22,8 @@ export async function createApp(env: Env): Promise<INestApplication> {
 export function setupApp(app: INestApplication): INestApplication {
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();
+  // A web chama a api direto do navegador: só as origens configuradas.
+  app.enableCors({ origin: app.get<Env>(ENV).CORS_ORIGIN, methods: ['GET', 'POST'] });
 
   const config = addWebhookSignature(
     new DocumentBuilder()
