@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp } from './support/test-app.js';
 import { createTestPrisma, truncateAll } from './support/test-db.js';
 
-// O POST /simulate envia por HTTP para a própria api: aqui ela precisa ouvir uma porta de verdade.
+// O POST /simulate envia por HTTP para a própria api (o createTestApp abre uma porta real).
 const prisma = createTestPrisma();
 let app: INestApplication;
 let server: Server;
@@ -16,7 +16,6 @@ let result: SimulationResult;
 beforeAll(async () => {
   await truncateAll(prisma);
   app = await createTestApp();
-  await app.listen(0);
   server = app.getHttpServer() as Server;
 
   const res = await request(server).post('/simulate').send({ orders: 20, seed: 1 }).expect(200);
