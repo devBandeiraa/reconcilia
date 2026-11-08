@@ -116,9 +116,11 @@ export class ActionsService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
+        // Um único horário para a execução, o caso RESOLVED e a auditoria.
+        const now = new Date();
         const claimed = await tx.action.updateMany({
           where: { id: actionId, status: ActionStatus.APPROVED },
-          data: { status: ActionStatus.EXECUTED, executedAt: new Date() },
+          data: { status: ActionStatus.EXECUTED, executedAt: now },
         });
         if (claimed.count === 0) return; // outra chamada executou primeiro
 
@@ -127,7 +129,7 @@ export class ActionsService {
         await tx.action.update({ where: { id: actionId }, data: { executionResult: result } });
         await tx.case.updateMany({
           where: { id: caseId, status: CaseStatus.OPEN },
-          data: { status: CaseStatus.RESOLVED, resolvedAt: new Date() },
+          data: { status: CaseStatus.RESOLVED, resolvedAt: now },
         });
         await tx.auditEntry.create({
           data: {
@@ -135,6 +137,7 @@ export class ActionsService {
             caseId,
             event: AuditEvent.EXECUTED,
             actor: approvedBy,
+            at: now,
             details: { executor: 'backend', ...result },
           },
         });
