@@ -18,6 +18,8 @@ export const ReconciliationResultSchema = z.object({
   }),
   /** Divergências detectadas que já tinham caso aberto (ignoradas pelo índice parcial). */
   alreadyOpen: z.number().int(),
+  /** Divergências cujo caso uma pessoa já resolveu ou descartou: não são reabertas. */
+  alreadyResolved: z.number().int(),
   ranAt: isoDateTime,
 });
 export type ReconciliationResult = z.infer<typeof ReconciliationResultSchema>;
@@ -72,7 +74,16 @@ export type TimelineItem = z.infer<typeof TimelineItemSchema>;
 
 export const CaseHistoryItemSchema = z.object({
   at: isoDateTime,
-  kind: z.enum(['DETECTED', 'INVESTIGATION', 'RESOLVED', 'DISMISSED']),
+  kind: z.enum([
+    'DETECTED',
+    'INVESTIGATION',
+    'APPROVED',
+    'REJECTED',
+    'EXECUTED',
+    'EXECUTION_FAILED',
+    'RESOLVED',
+    'DISMISSED',
+  ]),
   description: z.string(),
 });
 export type CaseHistoryItem = z.infer<typeof CaseHistoryItemSchema>;
