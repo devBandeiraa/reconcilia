@@ -7,6 +7,32 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.4.0] - 2026-11-07
+
+### Adicionado
+
+- Verificação da assinatura `X-Signature` (HMAC-SHA256 do corpo bruto, comparação em tempo
+  constante) em todos os webhooks e no upload do extrato: assinatura ausente ou inválida
+  responde `401` sem gravar nada.
+- Ingestão idempotente: `INSERT ... ON CONFLICT (event_id) DO UPDATE SET received_count + 1` num
+  único statement. Evento novo responde `202 {duplicate: false}`; reenvio responde
+  `200 {duplicate: true}` e não enfileira.
+- Fila pg-boss no próprio Postgres, com o job criado na mesma transação do evento; policy
+  `exclusive` com `singletonKey = eventId`; retry com backoff exponencial e dead letter queue.
+- Worker no mesmo processo da api, em lote e com liquidação por job: aplica cada evento do
+  gateway uma única vez (`UPDATE ... WHERE processed_at IS NULL`), marca o pedido como `PAID` na
+  captura e chama o ponto de extensão do ledger (no-op até a fase 5).
+- `GET /admin/dlq`: eventos que esgotaram as tentativas, com a mensagem do último erro.
+- `eventId` e `orderExternalId` em todas as linhas de log da requisição e do worker.
+- `QUEUE_RETRY_LIMIT`, `QUEUE_RETRY_DELAY_SECONDS` e `QUEUE_POLLING_SECONDS` no
+  `apps/api/.env.example`.
+- Seção "Idempotência" no README e ADR 0004: fila no Postgres.
+
+### Alterado
+
+- `WebhookAck` ganha `duplicate`; o upload do extrato passa a responder `StatementAck`.
+- O Prisma desconecta no `onApplicationShutdown`, depois do pg-boss parar.
+
 ## [0.3.0] - 2026-11-07
 
 ### Adicionado
@@ -80,7 +106,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
   formulários de issue.
 - ADR 0001: monorepo com pnpm workspaces.
 
-[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.3.0...HEAD
+[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/devBandeiraa/reconcilia/releases/tag/v0.1.0
