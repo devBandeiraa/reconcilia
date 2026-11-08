@@ -79,10 +79,15 @@ export class CasesService {
     if (!row) throw new NotFoundException(`Caso ${id} não encontrado`);
 
     const ref = row.order.externalId;
-    const [paymentEvents, erpEvents, captures] = await Promise.all([
+    const [paymentEvents, erpEvents, captures, investigations] = await Promise.all([
       this.prisma.paymentEvent.findMany({ where: { orderExternalId: ref } }),
       this.prisma.erpEvent.findMany({ where: { orderExternalId: ref } }),
       this.statement.listCaptures(ref),
+      this.prisma.investigation.findMany({
+        where: { caseId: id },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true, status: true, suggestedAction: true, failureReason: true },
+      }),
     ]);
 
     const orderCreated: TimelineItem = {
@@ -136,6 +141,20 @@ export class CasesService {
         description: 'Detectado pela conciliação',
       },
     ];
+    for (const investigation of investigations) {
+      const kind = (investigation.suggestedAction as { kind?: string } | null)?.kind;
+      const detail =
+        investigation.status === 'DONE' && kind
+          ? `: sugeriu ${kind}`
+          : investigation.failureReason
+            ? `: ${investigation.failureReason}`
+            : '';
+      history.push({
+        at: investigation.createdAt.toISOString(),
+        kind: 'INVESTIGATION',
+        description: `Investigação do agente ${investigation.status}${detail}`,
+      });
+    }
     if (row.resolvedAt && row.status !== 'OPEN') {
       history.push({
         at: row.resolvedAt.toISOString(),
