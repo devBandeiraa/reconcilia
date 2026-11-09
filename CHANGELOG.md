@@ -7,6 +7,47 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.10.0] - 2026-11-08
+
+### Adicionado
+
+- Caso `CAPTURE_ON_CANCELED_ORDER`: o pedido está `CANCELED` na loja, mas o extrato do gateway
+  tem captura dele que os estornos não cobrem. O ledger continua registrando a captura; a
+  conciliação abre o caso (ADR 0010).
+- Webhook da loja `order.canceled`: cancela só pedido `PENDING` (UPDATE condicional, com
+  `canceled_at`); reenvio não muda nada; pedido que ainda não existe responde 409.
+- Ação `REFUND_CAPTURE { chargeId }`: aceita só se a cobrança está no extrato e o pedido está
+  `CANCELED`. Aprovada, lança débito `REFUNDS` / crédito `GATEWAY_RECEIVABLE` com o valor do
+  extrato e `transactionId = refund-capture:<chargeId>`, um estorno por cobrança.
+- Simulador: falha `--canceled` (padrão 0.1) e o tipo novo no gabarito; `cancellations` nos
+  totais.
+- Prompt do agente `system.v2.md` e roteiro do modo demonstração para o tipo novo.
+- `POST /session { operator }`: token de operador assinado (HMAC-SHA256, 24h). Aprovar e recusar
+  exigem `Authorization: Bearer`; sem token válido, 401 (ADR 0011).
+- `SESSION_SECRET` e `WEBHOOK_TOLERANCE_SECONDS` no `apps/api/.env.example`, validados na subida.
+- Web: nome de operador escolhido uma vez (lembrado por 24h), operador no cabeçalho, e o tipo novo
+  de caso com filtro, contador, selo, a ação "Estornar a captura" e o cancelamento na linha do
+  tempo.
+- Hook `commit-msg` que remove linhas de coautoria do Claude antes do commitlint.
+
+### Alterado
+
+- **Quebra de contrato:** `X-Signature` passa ao formato `t=<unix>,v1=<hmac de "<t>.<corpo>">`.
+  Assinaturas fora da janela de 300s (passado ou futuro) são recusadas com 401, e mais de um `v1`
+  é aceito para trocar o segredo. O formato `sha256=` deixa de valer (ADR 0012).
+- **Quebra de contrato:** `decidedBy` no corpo de aprovar e recusar é ignorado; quem decide é o
+  operador do token, inclusive na trilha de auditoria.
+- `POST /reconcile` devolve `opened.CAPTURE_ON_CANCELED_ORDER`, e `GET /cases/:id` traz
+  `order.canceledAt`.
+- README e CHANGELOG com o número exato de testes: 110 (92 da api e 18 do simulador). O README
+  dizia 92 no total.
+
+### Segurança
+
+- Webhooks com timestamp assinado: um corpo capturado não serve mais para reenviar depois de 5
+  minutos.
+- A auditoria deixa de confiar num nome digitado em cada requisição.
+
 ## [0.9.0] - 2026-11-08
 
 ### Adicionado
@@ -222,7 +263,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
   formulários de issue.
 - ADR 0001: monorepo com pnpm workspaces.
 
-[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.9.0...HEAD
+[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.6.0...v0.7.0
