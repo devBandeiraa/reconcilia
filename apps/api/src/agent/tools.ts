@@ -44,8 +44,8 @@ const getOrder: ReadTool = {
   declaration: {
     name: 'getOrder',
     description:
-      'Pedido do caso na loja: status, total em centavos, parcelas e quando foi criado (UTC e ' +
-      'horário local da loja).',
+      'Pedido do caso na loja: status, total em centavos, parcelas, quando foi criado e, se foi ' +
+      'cancelado, quando (UTC e horário local da loja).',
     parameters: NO_PARAMS,
   },
   async read({ tx, context }) {
@@ -59,6 +59,8 @@ const getOrder: ReadTool = {
       installments: order.installments,
       createdAt: order.createdAt.toISOString(),
       createdAtLocal: localTime(order.createdAt, context.storeTimezone),
+      canceledAt: order.canceledAt?.toISOString() ?? null,
+      canceledAtLocal: order.canceledAt ? localTime(order.canceledAt, context.storeTimezone) : null,
       storeTimezone: context.storeTimezone,
     };
   },
@@ -203,13 +205,14 @@ export const SUBMIT_DIAGNOSIS_DECLARATION: ToolDeclaration = {
               'REPROCESS_WEBHOOK',
               'IGNORE_DUPLICATE',
               'FLAG_ERP_DIVERGENCE',
+              'REFUND_CAPTURE',
             ],
           },
           params: {
             type: 'object',
             description:
-              'MARK_ORDER_PAID: { chargeId }. REPROCESS_WEBHOOK e IGNORE_DUPLICATE: { eventId }. ' +
-              'FLAG_ERP_DIVERGENCE: { expectedCents, erpCents }.',
+              'MARK_ORDER_PAID e REFUND_CAPTURE: { chargeId }. REPROCESS_WEBHOOK e ' +
+              'IGNORE_DUPLICATE: { eventId }. FLAG_ERP_DIVERGENCE: { expectedCents, erpCents }.',
             properties: {
               chargeId: { type: 'string' },
               eventId: { type: 'string' },

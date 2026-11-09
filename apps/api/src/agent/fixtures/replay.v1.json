@@ -10,7 +10,12 @@
         "pedido {{orderExternalId}}: {{orderStatus}}, total {{totalCents}}",
         "ERP: pagamento de {{erpCents}}"
       ],
-      "suggestedAction": { "kind": "MARK_ORDER_PAID", "params": { "chargeId": "{{chargeId}}" } },
+      "suggestedAction": {
+        "kind": "MARK_ORDER_PAID",
+        "params": {
+          "chargeId": "{{chargeId}}"
+        }
+      },
       "confidence": 0.93
     }
   },
@@ -28,7 +33,9 @@
       ],
       "suggestedAction": {
         "kind": "IGNORE_DUPLICATE",
-        "params": { "eventId": "{{duplicateEventId}}" }
+        "params": {
+          "eventId": "{{duplicateEventId}}"
+        }
       },
       "confidence": 0.95
     }
@@ -44,9 +51,34 @@
       ],
       "suggestedAction": {
         "kind": "FLAG_ERP_DIVERGENCE",
-        "params": { "expectedCents": "{{capturedCents}}", "erpCents": "{{erpCents}}" }
+        "params": {
+          "expectedCents": "{{capturedCents}}",
+          "erpCents": "{{erpCents}}"
+        }
       },
       "confidence": 0.88
+    }
+  },
+  "CAPTURE_ON_CANCELED_ORDER": {
+    "rounds": [
+      ["getOrder", "getGatewayStatement"],
+      ["getGatewayEvents", "getErpEvents"]
+    ],
+    "diagnosis": {
+      "diagnosis": "O pedido {{orderExternalId}} foi cancelado na loja em {{canceledAt}}, mas o gateway capturou {{capturedCents}} centavos dele ({{chargeId}}, em {{capturedAt}}). Os webhooks recebidos foram {{gatewayEventTypes}}, e o ERP registrou {{erpCents}}. É dinheiro recebido por um pedido cancelado: a captura precisa ser estornada ao cliente.",
+      "evidence": [
+        "pedido {{orderExternalId}}: {{orderStatus}} desde {{canceledAt}}, total {{totalCents}}",
+        "extrato: {{chargeId}} capturado {{capturedCents}} em {{capturedAt}}",
+        "webhooks recebidos: {{gatewayEventTypes}}",
+        "ERP: pagamento de {{erpCents}}"
+      ],
+      "suggestedAction": {
+        "kind": "REFUND_CAPTURE",
+        "params": {
+          "chargeId": "{{chargeId}}"
+        }
+      },
+      "confidence": 0.9
     }
   }
 }

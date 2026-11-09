@@ -25,6 +25,9 @@ export type Divergences = Record<CaseTypeName, string[]>;
  *   worker: uma captura recebida mas ainda na fila não é "pagamento sem pedido".
  * - DUPLICATE_WEBHOOK: algum evento do gateway do pedido chegou mais de uma vez.
  * - AMOUNT_MISMATCH: valor capturado (extrato), total do pedido e valor do ERP não são iguais.
+ * - CAPTURE_ON_CANCELED_ORDER: o pedido está CANCELED na loja, mas o extrato tem captura dele e
+ *   os estornos recebidos do gateway não cobrem o capturado: dinheiro recebido por um pedido
+ *   cancelado. O ledger registra a captura normalmente (o dinheiro entrou); o caso é que aponta.
  *
  * Abrir é idempotente pelo banco: ON CONFLICT DO NOTHING contra o índice único parcial
  * (um caso OPEN por pedido e tipo). Um caso que uma pessoa resolveu ou descartou não é reaberto.
@@ -91,35 +94,46 @@ export class ReconciliationService {
     }
     const statementRefs = [...capturedByOrder.keys()];
 
-    const [pendingWithCapture, capturedWebhooks, duplicatedEvents, erpTotals, ordersInStatement] =
-      await Promise.all([
-        this.prisma.order.findMany({
-          where: { status: OrderStatus.PENDING, externalId: { in: statementRefs } },
-          select: { id: true, externalId: true },
-        }),
-        this.prisma.paymentEvent.findMany({
-          where: { type: PaymentEventType.CAPTURED, orderExternalId: { in: statementRefs } },
-          select: { orderExternalId: true },
-          distinct: ['orderExternalId'],
-        }),
-        this.prisma.paymentEvent.findMany({
-          where: { receivedCount: { gt: 1 } },
-          select: { orderExternalId: true },
-          distinct: ['orderExternalId'],
-        }),
-        this.prisma.erpEvent.groupBy({
-          by: ['orderExternalId'],
-          where: {
-            type: ErpEventType.PAYMENT_RECORDED,
-            orderExternalId: { in: statementRefs },
-          },
-          _sum: { amountCents: true },
-        }),
-        this.prisma.order.findMany({
-          where: { externalId: { in: statementRefs } },
-          select: { id: true, externalId: true, totalCents: true },
-        }),
-      ]);
+    const [
+      pendingWithCapture,
+      capturedWebhooks,
+      duplicatedEvents,
+      erpTotals,
+      ordersInStatement,
+      refundTotals,
+    ] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { status: OrderStatus.PENDING, externalId: { in: statementRefs } },
+        select: { id: true, externalId: true },
+      }),
+      this.prisma.paymentEvent.findMany({
+        where: { type: PaymentEventType.CAPTURED, orderExternalId: { in: statementRefs } },
+        select: { orderExternalId: true },
+        distinct: ['orderExternalId'],
+      }),
+      this.prisma.paymentEvent.findMany({
+        where: { receivedCount: { gt: 1 } },
+        select: { orderExternalId: true },
+        distinct: ['orderExternalId'],
+      }),
+      this.prisma.erpEvent.groupBy({
+        by: ['orderExternalId'],
+        where: {
+          type: ErpEventType.PAYMENT_RECORDED,
+          orderExternalId: { in: statementRefs },
+        },
+        _sum: { amountCents: true },
+      }),
+      this.prisma.order.findMany({
+        where: { externalId: { in: statementRefs } },
+        select: { id: true, externalId: true, totalCents: true, status: true },
+      }),
+      this.prisma.paymentEvent.groupBy({
+        by: ['orderExternalId'],
+        where: { type: PaymentEventType.REFUNDED, orderExternalId: { in: statementRefs } },
+        _sum: { amountCents: true },
+      }),
+    ]);
 
     const webhookArrived = new Set(capturedWebhooks.map((e) => e.orderExternalId));
     const paymentWithoutOrder = pendingWithCapture
@@ -141,10 +155,23 @@ export class ReconciliationService {
       })
       .map((order) => order.id);
 
+    const refundedByOrder = new Map(
+      refundTotals.map((g) => [g.orderExternalId, g._sum.amountCents ?? 0]),
+    );
+    const captureOnCanceled = ordersInStatement
+      .filter(
+        (order) =>
+          order.status === OrderStatus.CANCELED &&
+          (capturedByOrder.get(order.externalId) ?? 0) >
+            (refundedByOrder.get(order.externalId) ?? 0),
+      )
+      .map((order) => order.id);
+
     return {
       PAYMENT_WITHOUT_ORDER: paymentWithoutOrder,
       DUPLICATE_WEBHOOK: duplicateOrders.map((order) => order.id),
       AMOUNT_MISMATCH: amountMismatch,
+      CAPTURE_ON_CANCELED_ORDER: captureOnCanceled,
     };
   }
 }

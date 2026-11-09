@@ -175,6 +175,7 @@ export function CasesView() {
     PAYMENT_WITHOUT_ORDER: useCount('PAYMENT_WITHOUT_ORDER', 'OPEN', version),
     DUPLICATE_WEBHOOK: useCount('DUPLICATE_WEBHOOK', 'OPEN', version),
     AMOUNT_MISMATCH: useCount('AMOUNT_MISMATCH', 'OPEN', version),
+    CAPTURE_ON_CANCELED_ORDER: useCount('CAPTURE_ON_CANCELED_ORDER', 'OPEN', version),
   };
   const resolved = useCount(null, 'RESOLVED', version);
 
@@ -200,7 +201,8 @@ export function CasesView() {
           text:
             `Simulação (seed ${result.seed}): ${result.orders} pedidos enviados, com ` +
             `${by('PAYMENT_WITHOUT_ORDER')} pagamentos sem pedido, ${by('DUPLICATE_WEBHOOK')} webhooks ` +
-            `duplicados e ${by('AMOUNT_MISMATCH')} valores divergentes. Agora clique em Conciliar agora.`,
+            `duplicados, ${by('AMOUNT_MISMATCH')} valores divergentes e ${by('CAPTURE_ON_CANCELED_ORDER')} ` +
+            `capturas em pedido cancelado. Agora clique em Conciliar agora.`,
         });
       } else {
         const result = await apiRequest('/reconcile', ReconciliationResultSchema, {
@@ -257,7 +259,7 @@ export function CasesView() {
 
       <section
         aria-label="Casos abertos por tipo"
-        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+        className="grid grid-cols-2 gap-3 lg:grid-cols-5"
       >
         {CASE_TYPES.map((t) => (
           <CounterCard

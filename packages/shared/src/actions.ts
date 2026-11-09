@@ -4,14 +4,20 @@ import { CASE_STATUSES } from './cases.js';
 
 const isoDateTime = z.iso.datetime();
 
-/** Quem decide. Até haver login, a pessoa se identifica na requisição. */
-export const DecisionRequestSchema = z.strictObject({
-  decidedBy: z.string().trim().min(1).max(100),
-});
+/**
+ * Quem decide vem do token de operador (Authorization: Bearer), nunca do corpo. Um decidedBy no
+ * corpo (clientes da v0.9) é aceito e ignorado.
+ */
+const ignoredDecidedBy = z
+  .string()
+  .optional()
+  .describe('Ignorado: quem decide é o operador do token (desde a v0.10.0).');
+
+export const DecisionRequestSchema = z.object({ decidedBy: ignoredDecidedBy });
 export type DecisionRequest = z.infer<typeof DecisionRequestSchema>;
 
-export const RejectRequestSchema = z.strictObject({
-  decidedBy: z.string().trim().min(1).max(100),
+export const RejectRequestSchema = z.object({
+  decidedBy: ignoredDecidedBy,
   reason: z.string().trim().min(1).max(500).optional(),
 });
 export type RejectRequest = z.infer<typeof RejectRequestSchema>;

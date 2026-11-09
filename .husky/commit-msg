@@ -1,1 +1,4 @@
+# O projeto é só no nome do autor: remove qualquer coautoria do Claude antes de validar.
+# `-i.bak` funciona no sed do GNU (Linux, Git Bash) e no do BSD (macOS).
+sed -i.bak '/^[Cc]o-[Aa]uthored-[Bb]y: Claude/d' "$1" && rm -f "$1.bak"
 pnpm exec commitlint --edit "$1"

@@ -1,6 +1,6 @@
-import type { CaseType, GabaritoEntry } from '@reconcilia/shared';
+import { CASE_TYPES, type GabaritoEntry } from '@reconcilia/shared';
 
-const LABEL_WIDTH = 'PAYMENT_WITHOUT_ORDER'.length;
+const LABEL_WIDTH = Math.max(...CASE_TYPES.map((type) => type.length));
 
 function describe(entry: GabaritoEntry): string {
   switch (entry.caseType) {
@@ -10,14 +10,15 @@ function describe(entry: GabaritoEntry): string {
       return `${entry.orderExternalId} ×${entry.copies}`;
     case 'AMOUNT_MISMATCH':
       return `${entry.orderExternalId} (pedido ${entry.orderCents}, ERP ${entry.erpCents})`;
+    case 'CAPTURE_ON_CANCELED_ORDER':
+      return `${entry.orderExternalId} (capturado ${entry.capturedCents})`;
   }
 }
 
 /** Gabarito em texto: quais pedidos devem virar qual caso na conciliação. */
 export function formatGabarito(seed: number, orders: number, gabarito: GabaritoEntry[]): string {
-  const types: CaseType[] = ['PAYMENT_WITHOUT_ORDER', 'DUPLICATE_WEBHOOK', 'AMOUNT_MISMATCH'];
   const lines = [`GABARITO · seed ${seed} · ${orders} pedidos`];
-  for (const type of types) {
+  for (const type of CASE_TYPES) {
     const entries = gabarito.filter((entry) => entry.caseType === type);
     const label = `${type.padEnd(LABEL_WIDTH)} (${entries.length})`;
     lines.push(entries.length ? `${label}: ${entries.map(describe).join(', ')}` : label);

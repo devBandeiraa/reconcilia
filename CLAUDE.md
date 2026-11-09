@@ -34,6 +34,7 @@ Restrição: CUSTO ZERO. Nenhum serviço pago, nenhuma dependência que exija ca
 3. Crie a branch da fase: fase/NN-nome.
 4. Implemente em passos pequenos. Um commit por passo lógico, em português, Conventional
    Commits (feat, fix, test, refactor, docs, chore, ci), no meu nome (git config já configurado).
+   Nunca adicione Co-Authored-By, Generated with ou qualquer atribuição de IA em commits e PRs.
 5. Rode `pnpm lint && pnpm typecheck && pnpm test` antes de dizer que terminou.
 6. Atualize a documentação (checklist abaixo).
 7. Abra o PR para a main com o modelo .github/pull_request_template.md. PARE e espere meu ok

@@ -235,6 +235,27 @@ export class ActionsService {
         };
       }
 
+      case 'REFUND_CAPTURE': {
+        if (order.status !== OrderStatus.CANCELED) {
+          throw new ExecutionError(`o pedido está ${order.status}; só se estorna pedido CANCELED`);
+        }
+        const capture = (await this.statement.listCaptures(order.externalId)).find(
+          (c) => c.chargeId === suggested.params.chargeId,
+        );
+        if (!capture) {
+          throw new ExecutionError(`${suggested.params.chargeId} não está no extrato do pedido`);
+        }
+        // Um estorno por cobrança: o transactionId vem do chargeId, não da ação. Mesmo que o caso
+        // seja investigado e aprovado de novo, o ledger devolve already-posted.
+        const transactionId = `refund-capture:${capture.chargeId}`;
+        const ledger = await this.ledger.recordRefund(tx, {
+          transactionId,
+          orderExternalId: order.externalId,
+          amountCents: capture.amountCents,
+        });
+        return { ledger, ledgerTransactionId: transactionId, amountCents: capture.amountCents };
+      }
+
       case 'IGNORE_DUPLICATE':
         return { eventId: suggested.params.eventId, ignored: true };
     }

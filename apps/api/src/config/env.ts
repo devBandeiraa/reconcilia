@@ -1,4 +1,4 @@
-import { DEV_WEBHOOK_SECRET } from '@reconcilia/shared';
+import { DEV_SESSION_SECRET, DEV_WEBHOOK_SECRET } from '@reconcilia/shared';
 import { z } from 'zod';
 
 function isValidTimeZone(timeZone: string): boolean {
@@ -24,6 +24,10 @@ export const EnvSchema = z
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }).default(LOCAL_DATABASE_URL),
     /** Segredo do HMAC dos webhooks (loja, gateway, ERP e extrato simulado). */
     WEBHOOK_SECRET: z.string().min(16).default(DEV_WEBHOOK_SECRET),
+    /** Idade máxima (passado ou futuro) do timestamp assinado no X-Signature. */
+    WEBHOOK_TOLERANCE_SECONDS: z.coerce.number().int().min(1).max(3600).default(300),
+    /** Segredo do HMAC do token de operador (quem aprova ou recusa na demo). */
+    SESSION_SECRET: z.string().min(16).default(DEV_SESSION_SECRET),
     /** Tentativas extras de um evento antes de ir para a DLQ. */
     QUEUE_RETRY_LIMIT: z.coerce.number().int().min(0).max(10).default(5),
     /** Atraso base do retry; cresce em backoff exponencial (teto de 300s). */
@@ -72,6 +76,16 @@ export const EnvSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['WEBHOOK_SECRET'],
+        message: 'em produção, use um segredo próprio com pelo menos 32 caracteres',
+      });
+    }
+    if (
+      env.NODE_ENV === 'production' &&
+      (env.SESSION_SECRET === DEV_SESSION_SECRET || env.SESSION_SECRET.length < 32)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SESSION_SECRET'],
         message: 'em produção, use um segredo próprio com pelo menos 32 caracteres',
       });
     }

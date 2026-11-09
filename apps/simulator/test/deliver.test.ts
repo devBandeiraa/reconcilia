@@ -79,6 +79,30 @@ describe('deliverScenario', () => {
     }
   });
 
+  it('nos pedidos cancelados, o order.canceled vem logo depois do order.created e antes do gateway', () => {
+    const canceled = scenario.orders.filter((o) => o.failure === 'canceled');
+    expect(canceled.length).toBeGreaterThan(0);
+    for (const order of canceled) {
+      const mine = calls.filter(
+        (c) =>
+          c.path !== PATHS.statement && JSON.stringify(c.body).includes(`"${order.externalId}"`),
+      );
+      expect(mine.slice(0, 3).map((c) => (c.body as { type: string }).type)).toEqual([
+        'order.created',
+        'order.canceled',
+        'charge.authorized',
+      ]);
+    }
+    const notCanceled = scenario.orders
+      .filter((o) => o.failure !== 'canceled')
+      .map((o) => o.externalId);
+    const cancellations = calls
+      .filter((c) => c.path === PATHS.store)
+      .map((c) => StoreWebhookSchema.parse(c.body))
+      .filter((e) => e.type === 'order.canceled');
+    expect(cancellations.some((e) => notCanceled.includes(e.order.externalId))).toBe(false);
+  });
+
   it('para cada pedido, a loja vem antes do gateway, que vem antes do ERP', () => {
     for (const order of scenario.orders) {
       const ref = order.externalId;
@@ -98,6 +122,7 @@ describe('deliverScenario', () => {
     const captured = scenario.orders.filter((o) => o.captureCopies > 0).length;
     expect(totals).toEqual({
       orders: 60,
+      cancellations: scenario.orders.filter((o) => o.failure === 'canceled').length,
       authorizations: 60,
       captures: captured,
       duplicateCopies: copies - captured,
@@ -108,10 +133,17 @@ describe('deliverScenario', () => {
 });
 
 describe('sign', () => {
-  it('gera o HMAC-SHA256 no formato sha256=<hex>', () => {
-    // Vetor conhecido do HMAC-SHA256.
-    expect(sign('key', 'The quick brown fox jumps over the lazy dog')).toBe(
-      'sha256=f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8',
+  it('assina `<t>.<corpo>` no formato t=<unix>,v1=<hex>', () => {
+    const now = new Date(1_700_000_000_500); // os milissegundos são descartados
+    expect(sign('key', 'The quick brown fox jumps over the lazy dog', now)).toBe(
+      't=1700000000,v1=2f658d6aef4f246e91cd741bbcded7479e9605f9d41c9e248122a117e0e1765b',
+    );
+  });
+
+  it('o mesmo corpo em outro segundo tem outra assinatura', () => {
+    const body = '{"id":"evt_1"}';
+    expect(sign('key', body, new Date(1_700_000_000_000))).not.toBe(
+      sign('key', body, new Date(1_700_000_001_000)),
     );
   });
 });
@@ -124,10 +156,11 @@ describe('formatGabarito', () => {
     ]);
     expect(text.split('\n')).toEqual([
       'GABARITO · seed 1 · 4 pedidos',
-      'PAYMENT_WITHOUT_ORDER (1): S1-0001',
-      'DUPLICATE_WEBHOOK     (1): S1-0002 ×3',
-      'AMOUNT_MISMATCH       (0)',
-      'sem falha             (2)',
+      'PAYMENT_WITHOUT_ORDER     (1): S1-0001',
+      'DUPLICATE_WEBHOOK         (1): S1-0002 ×3',
+      'AMOUNT_MISMATCH           (0)',
+      'CAPTURE_ON_CANCELED_ORDER (0)',
+      'sem falha                 (2)',
     ]);
   });
 });

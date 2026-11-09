@@ -10,6 +10,7 @@ const USAGE = `Uso: pnpm --filter simulator start [opções]
   --lost P        fração com o webhook de captura perdido (padrão 0.1)
   --duplicate P   fração com o webhook de captura duplicado (padrão 0.15)
   --mismatch P    fração com valor divergente no ERP (padrão 0.1)
+  --canceled P    fração cancelada na loja antes da captura (padrão 0.1)
   --seed N        semente: a mesma semente gera o mesmo cenário (padrão: aleatória)
   --json          imprime o resultado em JSON
   --dry-run       só gera e imprime o gabarito, sem enviar nada
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
       lost: { type: 'string' },
       duplicate: { type: 'string' },
       mismatch: { type: 'string' },
+      canceled: { type: 'string' },
       seed: { type: 'string' },
       json: { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
@@ -51,6 +53,7 @@ async function main(): Promise<void> {
     lost: toNumber(values.lost),
     duplicate: toNumber(values.duplicate),
     mismatch: toNumber(values.mismatch),
+    canceled: toNumber(values.canceled),
   };
   const seed = toNumber(values.seed) ?? randomInt(0, 2_147_483_647);
   if (!Number.isInteger(seed) || seed < 0) throw new Error('--seed deve ser um inteiro >= 0');
@@ -84,7 +87,8 @@ async function main(): Promise<void> {
   const t = result.totals;
   console.log(formatGabarito(result.seed, result.orders, result.gabarito));
   console.log(
-    `\nEnviado para ${env.API_URL}: ${t.orders} pedidos, ${t.authorizations} autorizações, ` +
+    `\nEnviado para ${env.API_URL}: ${t.orders} pedidos (${t.cancellations} cancelados), ` +
+      `${t.authorizations} autorizações, ` +
       `${t.captures} capturas (+${t.duplicateCopies} cópias duplicadas), ` +
       `${t.erpEvents} eventos do ERP, ${t.statementEntries} linhas no extrato.`,
   );

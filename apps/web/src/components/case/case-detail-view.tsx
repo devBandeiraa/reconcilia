@@ -111,6 +111,14 @@ function Sides({ detail, timeZone }: { detail: CaseDetail; timeZone: string }) {
           <dd>
             <Time iso={order.createdAt} timeZone={timeZone} />
           </dd>
+          {order.canceledAt && (
+            <>
+              <dt className="text-muted-foreground">Cancelado</dt>
+              <dd>
+                <Time iso={order.canceledAt} timeZone={timeZone} />
+              </dd>
+            </>
+          )}
         </dl>
       </Side>
       <Side title="Gateway">

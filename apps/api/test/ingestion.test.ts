@@ -33,7 +33,8 @@ const ledger = new CountingLedger();
 let app: INestApplication;
 let server: Server;
 
-const planned = generateScenario({ orders: 1, lost: 0, duplicate: 0, mismatch: 0 }, 4).orders[0]!;
+const planned = generateScenario({ orders: 1, lost: 0, duplicate: 0, mismatch: 0, canceled: 0 }, 4)
+  .orders[0]!;
 const messages = buildMessages(planned, new Date('2026-01-02T10:00:00.000Z'));
 
 beforeAll(async () => {

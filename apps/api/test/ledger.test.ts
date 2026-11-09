@@ -135,8 +135,10 @@ describe('garantias do ledger no banco (por fora do serviço)', () => {
 });
 
 describe('ledger integrado ao worker', () => {
-  const planned = generateScenario({ orders: 1, lost: 0, duplicate: 0, mismatch: 0 }, 21)
-    .orders[0]!;
+  const planned = generateScenario(
+    { orders: 1, lost: 0, duplicate: 0, mismatch: 0, canceled: 0 },
+    21,
+  ).orders[0]!;
   const messages = buildMessages(planned, new Date('2026-01-03T09:00:00.000Z'));
 
   async function captureOnce(): Promise<void> {

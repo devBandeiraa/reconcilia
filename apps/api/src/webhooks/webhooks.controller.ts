@@ -3,6 +3,7 @@ import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
   ApiBody,
+  ApiConflictResponse,
   ApiOkResponse,
   ApiOperation,
   ApiSecurity,
@@ -62,9 +63,13 @@ export class WebhooksController {
   @Post('store')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
-    summary: 'Loja: pedido criado',
-    description: 'Cria o pedido (status PENDING). Reenvio do mesmo externalId é ignorado.',
+    summary: 'Loja: pedido criado ou cancelado',
+    description:
+      'order.created cria o pedido (status PENDING); reenvio do mesmo externalId é ignorado. ' +
+      'order.canceled cancela um pedido PENDING; reenvio não muda nada. Cancelar um pedido que ' +
+      'ainda não existe responde 409, para a loja tentar de novo.',
   })
+  @ApiConflictResponse({ description: 'Cancelamento de um pedido que ainda não existe' })
   @ApiBody({ schema: toOpenApiSchema(StoreWebhookSchema) })
   async store(
     @Body(new ZodValidationPipe(StoreWebhookSchema)) event: StoreWebhook,

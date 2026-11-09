@@ -1,4 +1,4 @@
-import { DEV_WEBHOOK_SECRET } from '@reconcilia/shared';
+import { DEV_SESSION_SECRET, DEV_WEBHOOK_SECRET } from '@reconcilia/shared';
 import { describe, expect, it } from 'vitest';
 import { LOCAL_DATABASE_URL, loadEnv } from '../src/config/env.js';
 
@@ -10,6 +10,8 @@ describe('loadEnv', () => {
       LOG_LEVEL: 'info',
       DATABASE_URL: LOCAL_DATABASE_URL,
       WEBHOOK_SECRET: DEV_WEBHOOK_SECRET,
+      WEBHOOK_TOLERANCE_SECONDS: 300,
+      SESSION_SECRET: DEV_SESSION_SECRET,
       QUEUE_RETRY_LIMIT: 5,
       QUEUE_RETRY_DELAY_SECONDS: 2,
       QUEUE_POLLING_SECONDS: 2,
@@ -33,11 +35,19 @@ describe('loadEnv', () => {
     );
   });
 
-  it('em produção, recusa o segredo de webhook de desenvolvimento', () => {
+  it('em produção, recusa os segredos de desenvolvimento (webhook e sessão)', () => {
     expect(() => loadEnv({ NODE_ENV: 'production' })).toThrow(/WEBHOOK_SECRET/);
-    expect(loadEnv({ NODE_ENV: 'production', WEBHOOK_SECRET: 'x'.repeat(32) }).NODE_ENV).toBe(
-      'production',
+    expect(() => loadEnv({ NODE_ENV: 'production' })).toThrow(/SESSION_SECRET/);
+    expect(() => loadEnv({ NODE_ENV: 'production', WEBHOOK_SECRET: 'x'.repeat(32) })).toThrow(
+      /SESSION_SECRET/,
     );
+    expect(
+      loadEnv({
+        NODE_ENV: 'production',
+        WEBHOOK_SECRET: 'x'.repeat(32),
+        SESSION_SECRET: 'y'.repeat(32),
+      }).NODE_ENV,
+    ).toBe('production');
   });
 
   it('sem DEMO_REPLAY, exige GEMINI_API_KEY (vazia conta como ausente)', () => {

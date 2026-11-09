@@ -2,8 +2,9 @@ import { z } from 'zod';
 
 /**
  * Contratos dos sistemas externos (loja, gateway e ERP). Cada um fala no formato dele; a api
- * traduz para o modelo interno. Todos chegam assinados: `X-Signature: sha256=<hex>`, HMAC-SHA256
- * do corpo bruto com o WEBHOOK_SECRET.
+ * traduz para o modelo interno. Todos chegam assinados: `X-Signature: t=<unix>,v1=<hex>`, com v1 =
+ * HMAC-SHA256 de `<t>.<corpo bruto>` com o WEBHOOK_SECRET; a api recusa timestamps fora da janela
+ * de tolerância (WEBHOOK_TOLERANCE_SECONDS, padrão 300s).
  */
 export const SIGNATURE_HEADER = 'x-signature';
 
@@ -16,17 +17,25 @@ const reference = z.string().min(1).max(64);
 const eventId = z.string().min(1).max(128);
 const installments = z.number().int().min(1).max(24);
 
-/** Loja → api: pedido criado. */
-export const StoreWebhookSchema = z.object({
-  id: eventId,
-  type: z.literal('order.created'),
-  occurredAt: isoDateTime,
-  order: z.object({
-    externalId: reference,
-    totalCents: cents,
-    installments,
+/** Loja → api: pedido criado ou cancelado. */
+export const StoreWebhookSchema = z.discriminatedUnion('type', [
+  z.object({
+    id: eventId,
+    type: z.literal('order.created'),
+    occurredAt: isoDateTime,
+    order: z.object({
+      externalId: reference,
+      totalCents: cents,
+      installments,
+    }),
   }),
-});
+  z.object({
+    id: eventId,
+    type: z.literal('order.canceled'),
+    occurredAt: isoDateTime,
+    order: z.object({ externalId: reference }),
+  }),
+]);
 export type StoreWebhook = z.infer<typeof StoreWebhookSchema>;
 
 export const GATEWAY_EVENT_TYPES = [

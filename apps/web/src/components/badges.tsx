@@ -8,6 +8,7 @@ const TYPE_STYLE: Record<CaseType, string> = {
   PAYMENT_WITHOUT_ORDER: 'border-sky-500/40 bg-sky-500/10 text-sky-300',
   DUPLICATE_WEBHOOK: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
   AMOUNT_MISMATCH: 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300',
+  CAPTURE_ON_CANCELED_ORDER: 'border-rose-500/40 bg-rose-500/10 text-rose-300',
 };
 
 const STATUS_STYLE: Record<CaseStatus, string> = {
@@ -36,4 +37,5 @@ export const CASE_TYPE_ACCENT: Record<CaseType, string> = {
   PAYMENT_WITHOUT_ORDER: 'text-sky-300',
   DUPLICATE_WEBHOOK: 'text-amber-300',
   AMOUNT_MISMATCH: 'text-fuchsia-300',
+  CAPTURE_ON_CANCELED_ORDER: 'text-rose-300',
 };

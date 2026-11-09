@@ -10,6 +10,8 @@ export const GATEWAY_PROVIDER = 'simpay';
 
 export interface OrderMessages {
   store: StoreWebhook;
+  /** order.canceled, enviado só nos pedidos com a falha canceled. */
+  canceled: StoreWebhook;
   authorized: GatewayWebhook;
   captured: GatewayWebhook;
   statement: GatewayStatementEntry;
@@ -48,6 +50,12 @@ export function buildMessages(order: PlannedOrder, base: Date): OrderMessages {
         totalCents: order.totalCents,
         installments: order.installments,
       },
+    },
+    canceled: {
+      id: `${ref}:order.canceled`,
+      type: 'order.canceled',
+      occurredAt: at(base, 0.5),
+      order: { externalId: ref },
     },
     authorized: charge('charge.authorized', 1),
     captured,

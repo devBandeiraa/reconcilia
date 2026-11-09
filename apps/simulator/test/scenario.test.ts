@@ -20,7 +20,7 @@ describe('generateScenario', () => {
 
   it('a frequência das falhas acompanha as taxas pedidas', () => {
     const { orders } = generateScenario(
-      { orders: 200, lost: 0.1, duplicate: 0.2, mismatch: 0.1 },
+      { orders: 200, lost: 0.1, duplicate: 0.2, mismatch: 0.1, canceled: 0.1 },
       3,
     );
     const count = (failure: string) => orders.filter((o) => o.failure === failure).length;
@@ -30,6 +30,8 @@ describe('generateScenario', () => {
     expect(count('duplicate')).toBeLessThan(60);
     expect(count('mismatch')).toBeGreaterThan(8);
     expect(count('mismatch')).toBeLessThan(35);
+    expect(count('canceled')).toBeGreaterThan(8);
+    expect(count('canceled')).toBeLessThan(35);
   });
 
   it('cada falha tem o efeito esperado no pedido', () => {
@@ -61,6 +63,7 @@ describe('generateScenario', () => {
       lost: 'PAYMENT_WITHOUT_ORDER',
       duplicate: 'DUPLICATE_WEBHOOK',
       mismatch: 'AMOUNT_MISMATCH',
+      canceled: 'CAPTURE_ON_CANCELED_ORDER',
     };
     scenario.gabarito.forEach((entry, i) => {
       expect(entry.caseType).toBe(expectedType[withFailure[i]!.failure!]);
@@ -68,7 +71,10 @@ describe('generateScenario', () => {
   });
 
   it('sem taxas, nenhum pedido tem falha', () => {
-    const scenario = generateScenario({ orders: 30, lost: 0, duplicate: 0, mismatch: 0 }, 1);
+    const scenario = generateScenario(
+      { orders: 30, lost: 0, duplicate: 0, mismatch: 0, canceled: 0 },
+      1,
+    );
     expect(scenario.gabarito).toEqual([]);
   });
 

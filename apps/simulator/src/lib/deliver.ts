@@ -31,6 +31,8 @@ export interface DeliveryOptions {
 /**
  * Envia o cenário. Por pedido, em ordem: loja → gateway (authorized, captured) → ERP.
  * - lost: o captured nunca é enviado, mas a captura entra no extrato do gateway.
+ * - canceled: a loja manda order.canceled logo depois do order.created; o gateway captura assim
+ *   mesmo e o ERP registra o pagamento.
  * - duplicate: a primeira cópia vai sozinha e as demais em paralelo.
  * O extrato é publicado em lotes no fim.
  */
@@ -41,6 +43,7 @@ export async function deliverScenario(
 ): Promise<DeliveryTotals> {
   const totals: DeliveryTotals = {
     orders: 0,
+    cancellations: 0,
     authorizations: 0,
     captures: 0,
     duplicateCopies: 0,
@@ -58,6 +61,10 @@ export async function deliverScenario(
 
       await transport.post(PATHS.store, messages.store);
       totals.orders++;
+      if (order.failure === 'canceled') {
+        await transport.post(PATHS.store, messages.canceled);
+        totals.cancellations++;
+      }
       await transport.post(PATHS.gateway, messages.authorized);
       totals.authorizations++;
       statement[index] = messages.statement;

@@ -75,7 +75,9 @@ describe('conciliação contra o gabarito do simulador', () => {
       PAYMENT_WITHOUT_ORDER: count('PAYMENT_WITHOUT_ORDER'),
       DUPLICATE_WEBHOOK: count('DUPLICATE_WEBHOOK'),
       AMOUNT_MISMATCH: count('AMOUNT_MISMATCH'),
+      CAPTURE_ON_CANCELED_ORDER: count('CAPTURE_ON_CANCELED_ORDER'),
     });
+    expect(count('CAPTURE_ON_CANCELED_ORDER')).toBeGreaterThan(0);
     expect(result.alreadyOpen).toBe(0);
   });
 
@@ -90,6 +92,7 @@ describe('conciliação contra o gabarito do simulador', () => {
       PAYMENT_WITHOUT_ORDER: 0,
       DUPLICATE_WEBHOOK: 0,
       AMOUNT_MISMATCH: 0,
+      CAPTURE_ON_CANCELED_ORDER: 0,
     });
     expect(second.alreadyOpen).toBe(gabarito.length);
     expect(await prisma.case.count()).toBe(gabarito.length);

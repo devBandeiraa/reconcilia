@@ -16,9 +16,10 @@ Demo ao vivo (em construção) · Vídeo de 1 min (em construção) · Documenta
 
 </div>
 
-> **Status:** v0.9.0. Backend e interface completos: simulador, ingestão idempotente, ledger,
-> conciliação, agente de IA, aprovação humana com auditoria e as telas em Next.js. Falta o
-> deploy (fase 10); veja o [roadmap](#roadmap).
+> **Status:** v0.10.0. Backend e interface completos: simulador, ingestão idempotente, ledger,
+> conciliação, agente de IA, aprovação humana com auditoria e as telas em Next.js. A v0.10.0
+> acrescenta a captura em pedido cancelado, o token de quem aprova e o timestamp assinado nos
+> webhooks. Falta o deploy; veja o [roadmap](#roadmap).
 
 ## O problema
 
@@ -26,7 +27,8 @@ Uma venda passa por três sistemas que não conversam bem: a **loja** cria o ped
 captura o pagamento e avisa por webhook, e o **ERP** registra o valor para o financeiro. Três
 falhas aparecem sempre: o webhook de captura que **se perde** (cliente pagou, pedido segue
 pendente), o webhook que chega **duplicado** (risco de baixar o pagamento duas vezes) e o
-**valor divergente** entre gateway e ERP (juros de parcelamento, por exemplo). Na Backlgrs eram
+**valor divergente** entre gateway e ERP (juros de parcelamento, por exemplo). Uma quarta é mais
+rara e mais cara: o gateway **captura um pedido que a loja já cancelou**. Na Backlgrs eram
 mais de 15 incidentes por semana em 5 lojas, investigados um a um, na mão.
 
 ## Como funciona
@@ -80,6 +82,15 @@ só é executada depois que uma pessoa aprova.
   nada (índice único parcial). Prova:
   [`apps/api/test/reconciliation.test.ts`](apps/api/test/reconciliation.test.ts),
   [seção Conciliação](#conciliação), [ADR 0006](docs/adr/0006-conciliacao.md).
+- **Captura em pedido cancelado vira caso, e o estorno acontece uma vez só.** O ledger registra
+  a captura (o dinheiro entrou), a conciliação abre o caso e o estorno aprovado usa o
+  `transactionId` da cobrança: aprovar duas vezes, ou duas ações, estorna uma vez. Prova:
+  [`apps/api/test/actions.test.ts`](apps/api/test/actions.test.ts),
+  [ADR 0010](docs/adr/0010-captura-em-pedido-cancelado.md).
+- **Webhooks com timestamp assinado.** `X-Signature: t=<unix>,v1=<hmac>`, como no Stripe:
+  assinatura com mais de 5 minutos é recusada mesmo com o HMAC certo. Prova:
+  [`apps/api/test/webhooks.test.ts`](apps/api/test/webhooks.test.ts),
+  [ADR 0012](docs/adr/0012-timestamp-assinado-nos-webhooks.md).
 - **Agente de IA só de leitura, com limites claros.**
   - As ferramentas rodam em transação `READ ONLY` (o Postgres recusa escrita).
   - O pedido vem do caso, nunca do modelo.
@@ -92,7 +103,8 @@ só é executada depois que uma pessoa aprova.
 
 - **Aprovação humana com execução idempotente e trilha de auditoria.** A IA só sugere; uma
   pessoa aprova; o backend executa **uma única vez**, mesmo com duas aprovações ao mesmo tempo.
-  Tudo vai para uma trilha de auditoria append-only. Prova:
+  Quem aprova vem de um token assinado, não de um nome digitado, e tudo vai para uma trilha de
+  auditoria append-only. Prova:
   [`apps/api/test/actions.test.ts`](apps/api/test/actions.test.ts),
   [seção Aprovação humana](#aprovação-humana), [ADR 0008](docs/adr/0008-aprovacao-e-auditoria.md).
 
@@ -149,7 +161,7 @@ Studio (não exige cartão) e, no `apps/api/.env`, defina `DEMO_REPLAY=false` e
 
 ## Simulador
 
-Gera tráfego de loja, gateway e ERP com as três falhas e imprime o **gabarito**: quais pedidos
+Gera tráfego de loja, gateway e ERP com as quatro falhas e imprime o **gabarito**: quais pedidos
 devem virar qual caso na conciliação. Com a api no ar (`pnpm dev`):
 
 ```bash
@@ -158,12 +170,13 @@ pnpm --filter simulator start --orders 20 --seed 1
 
 ```
 GABARITO · seed 1 · 20 pedidos
-PAYMENT_WITHOUT_ORDER (1): S1-0006
-DUPLICATE_WEBHOOK     (6): S1-0004 ×2, S1-0010 ×3, S1-0011 ×4, S1-0013 ×5, S1-0016 ×2, S1-0018 ×4
-AMOUNT_MISMATCH       (3): S1-0007 (pedido 59840, ERP 77732), S1-0012 (pedido 58470, ERP 61967), S1-0014 (pedido 72380, ERP 76708)
-sem falha             (10)
+PAYMENT_WITHOUT_ORDER     (1): S1-0006
+DUPLICATE_WEBHOOK         (6): S1-0004 ×2, S1-0010 ×3, S1-0011 ×4, S1-0013 ×5, S1-0016 ×2, S1-0018 ×4
+AMOUNT_MISMATCH           (3): S1-0007 (pedido 59840, ERP 77732), S1-0012 (pedido 58470, ERP 61967), S1-0014 (pedido 72380, ERP 76708)
+CAPTURE_ON_CANCELED_ORDER (2): S1-0005 (capturado 49920), S1-0020 (capturado 40040)
+sem falha                 (8)
 
-Enviado para http://localhost:3001: 20 pedidos, 20 autorizações, 19 capturas (+14 cópias duplicadas), 20 eventos do ERP, 20 linhas no extrato.
+Enviado para http://localhost:3001: 20 pedidos (2 cancelados), 20 autorizações, 19 capturas (+14 cópias duplicadas), 20 eventos do ERP, 20 linhas no extrato.
 ```
 
 | Parâmetro     | Padrão    | O que faz                                                            |
@@ -172,28 +185,31 @@ Enviado para http://localhost:3001: 20 pedidos, 20 autorizações, 19 capturas (
 | `--lost`      | 0.1       | Fração com o webhook de captura **perdido**                          |
 | `--duplicate` | 0.15      | Fração com o webhook de captura **duplicado** (2 a 5 cópias)         |
 | `--mismatch`  | 0.1       | Fração com **valor divergente** no ERP (juros de 2,99% por parcela)  |
+| `--canceled`  | 0.1       | Fração **cancelada na loja** antes de o gateway capturar             |
 | `--seed`      | aleatória | Mesma seed, mesmo cenário. `--orders 20` é o começo de `--orders 50` |
 | `--json`      | —         | Resultado em JSON                                                    |
 | `--dry-run`   | —         | Só gera e imprime o gabarito, sem enviar nada                        |
 
-Cada pedido tem no máximo uma falha, então `lost + duplicate + mismatch` precisa ser no máximo
+Cada pedido tem no máximo uma falha, então a soma das quatro frações precisa ser no máximo 1.
+Variáveis: `API_URL` (padrão `http://localhost:3001`) e `WEBHOOK_SECRET`.
 
-1. Variáveis: `API_URL` (padrão `http://localhost:3001`) e `WEBHOOK_SECRET`.
+Por pedido, o simulador envia, nesta ordem, assinando cada corpo no header
+`X-Signature: t=<unix>,v1=<hmac>` (v1 é o HMAC-SHA256 de `<t>.<corpo>`; veja
+[Idempotência](#idempotência)):
 
-Por pedido, o simulador envia, nesta ordem e assinando cada corpo com HMAC-SHA256 no header
-`X-Signature`:
-
-1. **Loja:** `order.created` para `POST /webhooks/store`.
+1. **Loja:** `order.created` para `POST /webhooks/store` e, só na falha `canceled`,
+   `order.canceled` logo em seguida.
 2. **Gateway:** `charge.authorized` e `charge.captured` para `POST /webhooks/gateway`.
 3. **ERP:** `payment.recorded` para `POST /webhooks/erp`.
 
 No fim, ele publica o **extrato do gateway** em `POST /sim/gateway/statement`.
 
-| Falha       | O que acontece                                                           | Caso esperado           |
-| ----------- | ------------------------------------------------------------------------ | ----------------------- |
-| `lost`      | O gateway captura, mas o `charge.captured` nunca chega; só o extrato tem | `PAYMENT_WITHOUT_ORDER` |
-| `duplicate` | O mesmo `charge.captured` chega de 2 a 5 vezes, parte em paralelo        | `DUPLICATE_WEBHOOK`     |
-| `mismatch`  | O ERP registra o total com juros de parcelamento                         | `AMOUNT_MISMATCH`       |
+| Falha       | O que acontece                                                              | Caso esperado               |
+| ----------- | --------------------------------------------------------------------------- | --------------------------- |
+| `lost`      | O gateway captura, mas o `charge.captured` nunca chega; só o extrato tem    | `PAYMENT_WITHOUT_ORDER`     |
+| `duplicate` | O mesmo `charge.captured` chega de 2 a 5 vezes, parte em paralelo           | `DUPLICATE_WEBHOOK`         |
+| `mismatch`  | O ERP registra o total com juros de parcelamento                            | `AMOUNT_MISMATCH`           |
+| `canceled`  | A loja cancela o pedido, mas o gateway captura e o ERP registra assim mesmo | `CAPTURE_ON_CANCELED_ORDER` |
 
 O mesmo gerador roda pela api em `POST /simulate` (o botão "Gerar falhas" da interface), que
 devolve a seed e o gabarito. Os IDs vêm da seed (`S1-0001`), então rodar a mesma seed de novo é
@@ -210,8 +226,8 @@ sequenceDiagram
   participant A as API
   participant DB as Postgres
   participant W as Worker
-  G->>A: POST /webhooks/gateway (X-Signature)
-  A->>A: HMAC em tempo constante (401 se inválido)
+  G->>A: POST /webhooks/gateway (X-Signature: t=…,v1=…)
+  A->>A: HMAC de t.corpo em tempo constante e t na janela de 300s (401 se não)
   A->>DB: BEGIN
   A->>DB: INSERT ... ON CONFLICT (event_id)<br/>DO UPDATE SET received_count = received_count + 1
   alt evento novo (received_count = 1)
@@ -231,6 +247,7 @@ sequenceDiagram
 
 | Camada         | Mecanismo                                                                    | O que impede                                                          |
 | -------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Assinatura     | HMAC de `<t>.<corpo>` e janela de `WEBHOOK_TOLERANCE_SECONDS` (300s)         | Corpo alterado e reenvio de uma assinatura capturada depois da janela |
 | Ingestão       | `UNIQUE (event_id)` + `INSERT ... ON CONFLICT DO UPDATE` num único statement | Duas linhas para o mesmo evento, mesmo com 50 cópias em paralelo      |
 | Enfileiramento | Job criado dentro da transação do INSERT (`fromPrisma` do pg-boss)           | Evento gravado sem job (ou job sem evento) se o processo cair no meio |
 | Fila           | Policy `exclusive` + `singletonKey = eventId`                                | Dois jobs vivos para o mesmo evento                                   |
@@ -247,6 +264,8 @@ Os testes que provam isso, contra um PostgreSQL real, estão em
 - **O mesmo webhook 50 vezes em paralelo:** 1 linha com `received_count = 50`, um `202` e 49
   respostas `200`, 1 job, 1 aplicação e o pedido `PAID`.
 - **Assinatura inválida, corpo alterado ou ausente:** `401`, nada gravado e nada enfileirado.
+- **Assinatura de mais de 5 minutos (ou do futuro), timestamp trocado ou formato antigo
+  `sha256=`:** `401` ([`webhooks.test.ts`](apps/api/test/webhooks.test.ts)).
 - **Ledger que falha 2 vezes e depois funciona:** aplicado uma vez só.
 - **Pedido que nunca chega:** as tentativas se esgotam e o evento aparece em `/admin/dlq`.
 
@@ -261,10 +280,11 @@ Todo movimento de dinheiro vira uma transação em partidas dobradas: um cabeça
 (`ledger_transactions`) e pelo menos dois lançamentos (`ledger_entries`). Os lançamentos são
 sempre positivos, e a direção (débito ou crédito) dá o sinal.
 
-| Movimento                   | Débito               | Crédito              | `transactionId`     |
-| --------------------------- | -------------------- | -------------------- | ------------------- |
-| Captura (`charge.captured`) | `GATEWAY_RECEIVABLE` | `ORDER_REVENUE`      | `capture:<eventId>` |
-| Estorno (`charge.refunded`) | `REFUNDS`            | `GATEWAY_RECEIVABLE` | `refund:<eventId>`  |
+| Movimento                           | Débito               | Crédito              | `transactionId`             |
+| ----------------------------------- | -------------------- | -------------------- | --------------------------- |
+| Captura (`charge.captured`)         | `GATEWAY_RECEIVABLE` | `ORDER_REVENUE`      | `capture:<eventId>`         |
+| Estorno (`charge.refunded`)         | `REFUNDS`            | `GATEWAY_RECEIVABLE` | `refund:<eventId>`          |
+| Estorno aprovado (`REFUND_CAPTURE`) | `REFUNDS`            | `GATEWAY_RECEIVABLE` | `refund-capture:<chargeId>` |
 
 - **`GATEWAY_RECEIVABLE`:** o que o gateway nos deve.
 - **`ORDER_REVENUE`:** a receita dos pedidos.
@@ -304,11 +324,12 @@ O a receber (R$ 43.245,70) é exatamente a soma das 90 capturas aplicadas.
 A conciliação compara, pedido a pedido, a **loja** (`orders`), o **gateway** (o extrato e os
 webhooks recebidos) e o **ERP**, e abre um caso para cada divergência:
 
-| Tipo                    | Quando abre                                                                                                | Falha do simulador |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------ |
-| `PAYMENT_WITHOUT_ORDER` | O extrato do gateway tem a captura, o pedido está `PENDING` e nenhum `charge.captured` desse pedido chegou | `lost`             |
-| `DUPLICATE_WEBHOOK`     | Algum evento do gateway do pedido chegou mais de uma vez (`received_count > 1`)                            | `duplicate`        |
-| `AMOUNT_MISMATCH`       | Valor capturado (extrato), total do pedido e valor do ERP não são os três iguais                           | `mismatch`         |
+| Tipo                        | Quando abre                                                                                                | Falha do simulador |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------ |
+| `PAYMENT_WITHOUT_ORDER`     | O extrato do gateway tem a captura, o pedido está `PENDING` e nenhum `charge.captured` desse pedido chegou | `lost`             |
+| `DUPLICATE_WEBHOOK`         | Algum evento do gateway do pedido chegou mais de uma vez (`received_count > 1`)                            | `duplicate`        |
+| `AMOUNT_MISMATCH`           | Valor capturado (extrato), total do pedido e valor do ERP não são os três iguais                           | `mismatch`         |
+| `CAPTURE_ON_CANCELED_ORDER` | O pedido está `CANCELED`, mas o extrato tem captura dele que os estornos recebidos não cobrem              | `canceled`         |
 
 - **Por que "nenhum `charge.captured` chegou":** uma captura que chegou mas ainda está na fila do
   worker não é "pagamento sem pedido". Com isso, o resultado não depende do tempo do worker.
@@ -350,15 +371,17 @@ curl localhost:3001/investigations/<investigationId> # polling: passos, diagnós
 
 | Ferramenta            | O que lê (sempre do pedido do caso)                                                      |
 | --------------------- | ---------------------------------------------------------------------------------------- |
-| `getOrder`            | Status, total, parcelas e criação (UTC e fuso da loja)                                   |
+| `getOrder`            | Status, total, parcelas, criação e cancelamento (UTC e fuso da loja)                     |
 | `getGatewayEvents`    | Webhooks do gateway: tipo, valor, `receivedCount`, quando ocorreu, chegou e foi aplicado |
 | `getGatewayStatement` | Extrato do gateway: as capturas, inclusive as cujo webhook se perdeu                     |
 | `getErpEvents`        | Lançamentos do ERP: tipo, valor e quando foram registrados                               |
 | `submitDiagnosis`     | Saída final: diagnóstico, evidências, ação sugerida e confiança (0 a 1)                  |
 
 As ações que ele pode sugerir são `MARK_ORDER_PAID` (`chargeId`), `REPROCESS_WEBHOOK` (`eventId`),
-`IGNORE_DUPLICATE` (`eventId`) e `FLAG_ERP_DIVERGENCE` (`expectedCents`, `erpCents`). O prompt de
-sistema é versionado em [`prompts/system.v1.md`](apps/api/src/agent/prompts/system.v1.md).
+`IGNORE_DUPLICATE` (`eventId`), `FLAG_ERP_DIVERGENCE` (`expectedCents`, `erpCents`) e
+`REFUND_CAPTURE` (`chargeId`; o valor do estorno vem do extrato, não do modelo). O prompt de
+sistema é versionado em [`prompts/system.v2.md`](apps/api/src/agent/prompts/system.v2.md); o
+`system.v1.md` fica como histórico.
 
 **Limites:**
 
@@ -367,8 +390,8 @@ sistema é versionado em [`prompts/system.v1.md`](apps/api/src/agent/prompts/sys
 - **O pedido vem do caso:** as ferramentas não têm argumentos e a ação não tem `orderId`.
 - **No máximo 8 chamadas ao modelo:** se passar disso, a investigação fica `FAILED`.
 - **Saída validada e conferida:** o `submitDiagnosis` passa por Zod e pela conferência contra os
-  dados. O `chargeId` e o `eventId` precisam ser do pedido, e os valores precisam bater com o
-  extrato e o ERP. Um diagnóstico inválido volta para o modelo **uma vez**; na segunda, a
+  dados. O `chargeId` e o `eventId` precisam ser do pedido, os valores precisam bater com o
+  extrato e o ERP, e o `REFUND_CAPTURE` só vale para pedido `CANCELED`. Um diagnóstico inválido volta para o modelo **uma vez**; na segunda, a
   investigação fica `FAILED`.
 - **Cota esgotada (429):** a investigação fica `FAILED` na hora, com o motivo, e o worker segue.
   Erros transitórios (5xx) têm até 3 tentativas curtas.
@@ -414,19 +437,26 @@ A ação sugerida pelo agente só é executada depois que uma pessoa aprova. Que
 backend, nunca o modelo.
 
 ```bash
-curl -X POST localhost:3001/actions/<id>/approve -H 'content-type: application/json' \
-  -d '{"decidedBy": "Ana"}'
-curl -X POST localhost:3001/actions/<id>/reject -H 'content-type: application/json' \
-  -d '{"decidedBy": "Ana", "reason": "quero conferir com o gateway"}'
+curl -X POST localhost:3001/session -H 'content-type: application/json' -d '{"operator": "Ana"}'
+# {"token":"<token>","operator":"Ana","expiresAt":"..."}
+curl -X POST localhost:3001/actions/<id>/approve -H "authorization: Bearer $TOKEN"
+curl -X POST localhost:3001/actions/<id>/reject -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' -d '{"reason": "quero conferir com o gateway"}'
 curl localhost:3001/actions/<id>   # decisão, resultado da execução e trilha de auditoria
 ```
 
-| Ação                  | O que o backend executa ao aprovar                                                                             |
-| --------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `MARK_ORDER_PAID`     | Pedido `PENDING → PAID` e captura no ledger com `capture:<eventId do extrato>`, o mesmo id que o worker usaria |
-| `REPROCESS_WEBHOOK`   | Reenfileira o evento original se ele ainda não foi aplicado (o worker aplica uma vez)                          |
-| `FLAG_ERP_DIVERGENCE` | Pede o ajuste ao ERP (aqui, o ERP simulado), uma vez por ação                                                  |
-| `IGNORE_DUPLICATE`    | Só encerra o caso                                                                                              |
+**Quem decide vem do token, não do corpo.** O `POST /session` troca um nome de operador por um
+token HMAC de 24h (`SESSION_SECRET`). Aprovar e recusar sem token válido respondem 401, e um
+`decidedBy` no corpo é ignorado. É identificação de demonstração, sem cadastro nem senha
+([ADR 0011](docs/adr/0011-identidade-do-operador.md)).
+
+| Ação                  | O que o backend executa ao aprovar                                                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `MARK_ORDER_PAID`     | Pedido `PENDING → PAID` e captura no ledger com `capture:<eventId do extrato>`, o mesmo id que o worker usaria                                   |
+| `REPROCESS_WEBHOOK`   | Reenfileira o evento original se ele ainda não foi aplicado (o worker aplica uma vez)                                                            |
+| `FLAG_ERP_DIVERGENCE` | Pede o ajuste ao ERP (aqui, o ERP simulado), uma vez por ação                                                                                    |
+| `IGNORE_DUPLICATE`    | Só encerra o caso                                                                                                                                |
+| `REFUND_CAPTURE`      | Estorno no ledger (débito `REFUNDS`, crédito `GATEWAY_RECEIVABLE`) com o valor do extrato e `refund-capture:<chargeId>`: um estorno por cobrança |
 
 O pedido sempre sai do caso, nunca dos `params`. Executada a ação, o caso fica `RESOLVED`. Se
 for recusada, o caso continua `OPEN` e pode ser investigado de novo.
@@ -446,7 +476,7 @@ for recusada, o caso continua `OPEN` e pode ser investigado de novo.
    perdido chegar depois, o ledger devolve `already-posted`, e não há lançamento em dobro.
 
 **Trilha de auditoria (`audit_log`):** registra `APPROVED`, `REJECTED`, `EXECUTED` e
-`EXECUTION_FAILED`, com quem, quando e os detalhes. Um trigger torna a tabela **append-only**, e
+`EXECUTION_FAILED`, com quem (o operador do token), quando e os detalhes. Um trigger torna a tabela **append-only**, e
 o histórico do `GET /cases/:id` mostra tudo. A conciliação **não reabre** um caso que uma pessoa
 resolveu ou descartou.
 
@@ -470,14 +500,14 @@ Histórico do caso S5005-0006:
 
 Abra http://localhost:3000 com `pnpm dev` rodando. O caminho da demo cabe em um minuto:
 
-1. **Casos:** "Gerar falhas" manda 30 pedidos com problemas pelo simulador, e "Conciliar agora"
-   abre os casos. Os contadores por tipo filtram a lista.
+1. **Casos:** "Gerar falhas" manda 30 pedidos com as quatro falhas pelo simulador, e "Conciliar
+   agora" abre os casos. Os contadores por tipo filtram a lista.
 2. **Caso:** loja, gateway (com o extrato) e ERP lado a lado, e a linha do tempo com os
    duplicados em âmbar. Os horários alternam entre UTC e o fuso da loja.
 3. **Agente:** "Investigar" mostra os passos enquanto o agente consulta os três lados, depois o
    diagnóstico, as evidências, a confiança e a ação sugerida.
-4. **Decisão:** com o seu nome, "Aprovar" faz o backend executar e o caso fica resolvido;
-   "Recusar" pede um motivo e mantém o caso aberto.
+4. **Decisão:** na primeira vez, escolha um nome de operador (lembrado por 24h). "Aprovar" faz o
+   backend executar e o caso fica resolvido; "Recusar" pede um motivo e mantém o caso aberto.
 5. **Saúde:** saldo do ledger por conta (o total é zero), fila de mortos e status da api.
 
 | Casos                                          | Caso, agente e aprovação                      |
@@ -497,22 +527,29 @@ são lidas pelo leitor de tela e a cor nunca é a única pista: todo selo tem te
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-São 92 testes hoje. Os 76 da api rodam contra um PostgreSQL real, e **nenhum chama o modelo
-real**: o `LlmClient` é trocado por roteiros (`FakeLlmClient`).
+São **110 testes** hoje, contados pelo Vitest: **92 da api**, que rodam contra um PostgreSQL
+real, e **18 do simulador**. A web não tem testes automatizados (veja as
+[limitações](#limitações-conhecidas)). **Nenhum teste chama o modelo real**: o `LlmClient` é
+trocado por roteiros (`FakeLlmClient`).
 
-- **Aprovação humana (13):**
+- **Aprovação humana (19):**
   - **Aprovar duas vezes em paralelo executa uma vez só:** um `APPROVED` e um `EXECUTED` na
     auditoria, e 2 lançamentos no ledger, não 4.
   - **Recusar não altera pedido nem ledger:** comparado por md5.
   - **O efeito de cada ação:** inclusive o webhook perdido que chega depois sem lançar em dobro.
+  - **Estorno de captura em pedido cancelado:** zera o recebível daquele pedido; duas aprovações
+    em paralelo e uma segunda ação estornam uma vez só; num pedido que não está cancelado, 422.
+  - **Quem decide vem do token:** sem token, com token adulterado, expirado ou de outro segredo,
+    401 e nada muda; a auditoria registra o operador do token mesmo com outro nome no corpo.
   - **A conciliação não reabre casos resolvidos.**
   - **Erros:** 422 sem mudar nada, além de 404 e 400.
   - **Auditoria:** append-only, e o ledger segue somando zero.
 
-- **Agente (16):**
+- **Agente (19):**
   - Cada tipo de caso termina `DONE` com a ação esperada.
   - Passar de 8 rodadas termina `FAILED`.
   - Um id inventado é recusado e o diagnóstico corrigido é aceito.
+  - Um `REFUND_CAPTURE` num pedido que não está cancelado é recusado.
   - Um diagnóstico inválido duas vezes termina `FAILED`.
   - O 429 termina `FAILED`, e o worker segue funcionando.
   - **O banco fica idêntico (md5 de todas as tabelas) antes e depois das ferramentas**, e uma
@@ -522,7 +559,7 @@ real**: o `LlmClient` é trocado por roteiros (`FakeLlmClient`).
   - O modo demonstração funciona ponta a ponta.
 
 - **Conciliação (7):**
-  - Com a seed fixa, os casos abertos são exatamente os do gabarito (22 casos dos 3 tipos na
+  - Com a seed fixa, os casos abertos são exatamente os do gabarito (27 casos dos 4 tipos na
     seed 42).
   - Rodar duas vezes não cria casos novos.
   - Conciliar sem esperar a fila dá o mesmo resultado.
@@ -541,19 +578,23 @@ real**: o `LlmClient` é trocado por roteiros (`FakeLlmClient`).
   retry depois de 2 falhas, dead letter queue e duplicados do ERP e da loja.
 - **Garantias do banco (4):** `eventId` duplicado, dois casos abertos iguais (e o índice
   parcial deixando passar quando o anterior foi resolvido) e lançamento de ledger com valor 0.
-- **Webhooks e extrato (6):** evento traduzido para o modelo interno, reenvio com 200, 400
-  com a lista de problemas, extrato com filtro e paginação.
+- **Webhooks e extrato (12):** evento traduzido para o modelo interno, reenvio com 200,
+  cancelamento da loja (idempotente, e 409 para pedido que não existe), 400 com a lista de
+  problemas, extrato com filtro e paginação, e a assinatura com timestamp: fora da janela (passado
+  ou futuro), corpo alterado, timestamp trocado e formato antigo dão 401; dentro da janela e com
+  mais de um `v1` válido, aceita.
 - **`POST /simulate` ponta a ponta (5):** o banco bate com o gabarito e a mesma seed de novo
   não grava nada novo.
-- **API (2):** o contrato do `/health` e o OpenAPI publicado em `/docs`.
-- **Env (4):** padrões, erro legível, `DATABASE_URL` que não é Postgres e `WEBHOOK_SECRET` em
-  produção.
+- **API (3):** o contrato do `/health` e o OpenAPI publicado em `/docs`.
+- **Env (6):** padrões, erro legível, `DATABASE_URL` que não é Postgres, os segredos de webhook e
+  de sessão em produção e a chave do Gemini fora do modo demonstração.
 
 Os testes de fila esperam retries reais (alguns segundos cada). Para isso, rodam com
 `QUEUE_RETRY_LIMIT=2`, `QUEUE_RETRY_DELAY_SECONDS=1` e polling de 0,5s.
 
-Os 16 do simulador cobrem o determinismo (mesma seed, mesmo cenário), o efeito de cada falha,
-o gabarito, os contratos dos payloads, a ordem dos envios e a assinatura HMAC.
+Os 18 do simulador cobrem o determinismo (mesma seed, mesmo cenário), o efeito de cada falha,
+o gabarito, os contratos dos payloads, a ordem dos envios (inclusive o cancelamento antes do
+gateway) e a assinatura `t=<unix>,v1=<hmac>`.
 
 Os testes usam um banco separado, `reconcilia_test`, que o Vitest cria e migra sozinho, então
 eles nunca apagam o banco de desenvolvimento. Para apontar para outro banco, use
@@ -645,11 +686,19 @@ sistema externo e não faz parte do modelo do Reconcilia.
 - [ADR 0007: agente somente leitura](docs/adr/0007-agente-somente-leitura.md)
 - [ADR 0008: aprovação e auditoria](docs/adr/0008-aprovacao-e-auditoria.md)
 - [ADR 0009: a web chama a api direto](docs/adr/0009-web-chama-a-api-direto.md)
+- [ADR 0010: captura em pedido cancelado](docs/adr/0010-captura-em-pedido-cancelado.md)
+- [ADR 0011: identidade do operador](docs/adr/0011-identidade-do-operador.md)
+- [ADR 0012: timestamp assinado nos webhooks](docs/adr/0012-timestamp-assinado-nos-webhooks.md)
 
 ## Limitações conhecidas
 
-- Não há login: quem aprova ou recusa se identifica no corpo da requisição (`decidedBy`). A
-  trilha de auditoria registra o nome informado, não uma identidade verificada.
+- **Quem aprova é identificação de demo, não autenticação real.** O nome de operador fica
+  amarrado a um token assinado pela api (24h), e a auditoria registra o nome do token, não um
+  campo livre em cada requisição. Mas não há cadastro nem senha: qualquer pessoa escolhe qualquer
+  nome, e um token vale até expirar (não há revogação).
+- O `REFUND_CAPTURE` lança o estorno direto no ledger, porque o gateway é simulado. Com um gateway
+  real, a ação pediria o estorno à API dele e o lançamento viria do `charge.refunded`; do jeito
+  atual, um `charge.refunded` da mesma cobrança que chegasse depois seria um segundo estorno.
 - O ajuste de divergência vai para um ERP simulado (`sim_erp_adjustments`). Num ERP real, seria a
   API dele, com o `actionId` como chave de idempotência.
 - O plano gratuito do Gemini tem cota baixa e instabilidade. No aceite, o `gemini-3.8-flash`
@@ -661,12 +710,14 @@ sistema externo e não faz parte do modelo do Reconcilia.
   gateway para a conta da loja), taxas e os ajustes do ERP ficam fora por enquanto.
 - Pedidos marcados como pagos antes da v0.5.0 não têm lançamento: o ledger começou a registrar
   nesta versão. Num banco novo (`pnpm db:reset`), tudo passa pelo ledger.
-- A assinatura dos webhooks não tem proteção contra replay (timestamp no header): um corpo
-  assinado capturado poderia ser reenviado. Reenviar é inofensivo aqui, porque a ingestão é
-  idempotente, mas um gateway real deveria mandar um timestamp assinado.
+- O timestamp assinado barra o reenvio depois de 5 minutos, não dentro da janela. Dentro dela,
+  quem garante uma única aplicação continua sendo a idempotência pelo banco. A janela também
+  exige que o relógio do remetente e o da api estejam com no máximo 5 minutos de diferença.
 - `GET /admin/dlq` não tem autenticação; a proteção da demo pública entra na fase 10.
-- A interface não tem testes automatizados de tela; foi conferida no navegador (desktop e
-  celular), com o fluxo completo de ponta a ponta.
+- A interface não tem testes automatizados de tela. A da v0.9.0 foi conferida no navegador
+  (desktop e celular), com o fluxo completo de ponta a ponta. As mudanças de tela da v0.10.0
+  (nome de operador, o tipo novo e o estorno) passaram por typecheck e lint e foram exercitadas
+  pela api, mas ainda não no navegador; as capturas novas entram na v0.11.0.
 - `NEXT_PUBLIC_API_URL` é embutida no build da web: trocar a api exige um novo build.
 - O gateway, a loja e o ERP são simulados. O extrato do gateway mora numa tabela do próprio
   banco (`sim_gateway_statement`), no lugar da API de conciliação de um gateway real.
@@ -677,19 +728,21 @@ sistema externo e não faz parte do modelo do Reconcilia.
 
 ## Roadmap
 
-| Versão | Entrega                                      | Status |
-| ------ | -------------------------------------------- | ------ |
-| v0.1.0 | Monorepo, CI, README inicial                 | ✅     |
-| v0.2.0 | Modelo de dados com garantias no banco       | ✅     |
-| v0.3.0 | Gerador de tráfego e das 3 falhas            | ✅     |
-| v0.4.0 | Webhooks idempotentes + fila                 | ✅     |
-| v0.5.0 | Partidas dobradas                            | ✅     |
-| v0.6.0 | Detecção de divergências                     | ✅     |
-| v0.7.0 | Agente de IA investigador                    | ✅     |
-| v0.8.0 | Aprovação humana e execução                  | ✅     |
-| v0.9.0 | Telas em Next.js                             | ✅     |
-| v1.0.0 | No ar + README final                         | 🚧     |
-| v1.1.0 | RAG com casos parecidos e runbook (opcional) | 🚧     |
+| Versão  | Entrega                                                                    | Status |
+| ------- | -------------------------------------------------------------------------- | ------ |
+| v0.1.0  | Monorepo, CI, README inicial                                               | ✅     |
+| v0.2.0  | Modelo de dados com garantias no banco                                     | ✅     |
+| v0.3.0  | Gerador de tráfego e das 3 falhas                                          | ✅     |
+| v0.4.0  | Webhooks idempotentes + fila                                               | ✅     |
+| v0.5.0  | Partidas dobradas                                                          | ✅     |
+| v0.6.0  | Detecção de divergências                                                   | ✅     |
+| v0.7.0  | Agente de IA investigador                                                  | ✅     |
+| v0.8.0  | Aprovação humana e execução                                                | ✅     |
+| v0.9.0  | Telas em Next.js                                                           | ✅     |
+| v0.10.0 | Captura em pedido cancelado, token de quem aprova e timestamp nos webhooks | ✅     |
+| v0.11.0 | Identidade visual, prévia de link e capturas                               | 🚧     |
+| v1.0.0  | No ar + README final                                                       | 🚧     |
+| v1.1.0  | RAG com casos parecidos e runbook (opcional)                               | 🚧     |
 
 ## Autor
 
