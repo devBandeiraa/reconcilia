@@ -22,7 +22,7 @@ export const MAX_ROUNDS = 8;
 /** Diagnósticos inválidos aceitos antes de desistir (o primeiro volta com o erro). */
 const MAX_INVALID_DIAGNOSES = 2;
 
-export const PROMPT_VERSION = 'system.v1';
+export const PROMPT_VERSION = 'system.v2';
 export const SYSTEM_PROMPT = readFileSync(
   new URL(`./prompts/${PROMPT_VERSION}.md`, import.meta.url),
   'utf8',
@@ -33,6 +33,8 @@ const CASE_DESCRIPTIONS: Record<CaseContext['caseType'], string> = {
     'o extrato do gateway mostra uma captura, mas o pedido segue PENDING e nenhum webhook de captura chegou',
   DUPLICATE_WEBHOOK: 'um webhook do gateway chegou mais de uma vez',
   AMOUNT_MISMATCH: 'valor capturado, total do pedido e valor do ERP não batem',
+  CAPTURE_ON_CANCELED_ORDER:
+    'o pedido está cancelado na loja, mas o extrato do gateway mostra uma captura dele',
 };
 
 export type AgentOutcome =

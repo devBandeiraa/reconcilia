@@ -6,6 +6,7 @@ export const ACTION_KINDS = [
   'MARK_ORDER_PAID',
   'FLAG_ERP_DIVERGENCE',
   'IGNORE_DUPLICATE',
+  'REFUND_CAPTURE',
 ] as const;
 export type ActionKind = (typeof ACTION_KINDS)[number];
 
@@ -35,6 +36,11 @@ export const SuggestedActionSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('FLAG_ERP_DIVERGENCE'),
     params: z.strictObject({ expectedCents: cents, erpCents: cents }),
+  }),
+  z.object({
+    // Estorno da captura de um pedido cancelado. O valor vem do extrato, nunca do modelo.
+    kind: z.literal('REFUND_CAPTURE'),
+    params: z.strictObject({ chargeId: z.string().min(1).max(64) }),
   }),
 ]);
 export type SuggestedAction = z.infer<typeof SuggestedActionSchema>;

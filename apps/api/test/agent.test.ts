@@ -111,6 +111,27 @@ describe('agente: limites', () => {
     );
   });
 
+  it('REFUND_CAPTURE num pedido que não está cancelado é recusado', async () => {
+    const target = await caseOf(prisma, 'PAYMENT_WITHOUT_ORDER', 1);
+    const refund = {
+      ...correctDiagnosis('PAYMENT_WITHOUT_ORDER', target),
+      suggestedAction: { kind: 'REFUND_CAPTURE', params: { chargeId: target.chargeId } },
+    };
+    llm.impl = new FakeLlmClient([
+      READ_ALL,
+      submit(refund),
+      submit(correctDiagnosis('PAYMENT_WITHOUT_ORDER', target)),
+    ]);
+
+    const investigation = await investigate(app, target.caseId);
+
+    expect(investigation.status).toBe('DONE');
+    expect(investigation.suggestedAction?.kind).toBe('MARK_ORDER_PAID');
+    expect(investigation.steps.map((s) => s.summary)).toContainEqual(
+      expect.stringMatching(/recusado: REFUND_CAPTURE só vale para pedido CANCELED/),
+    );
+  });
+
   it('diagnóstico inválido duas vezes → FAILED com o motivo', async () => {
     const target = await caseOf(prisma, 'AMOUNT_MISMATCH');
     const wrongValues = {

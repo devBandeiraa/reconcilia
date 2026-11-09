@@ -96,6 +96,11 @@ export function correctDiagnosis(type: CaseType, c: CaseUnderTest): Record<strin
           params: { expectedCents: c.capturedCents, erpCents: c.erpCents },
         },
       };
+    case 'CAPTURE_ON_CANCELED_ORDER':
+      return {
+        ...base,
+        suggestedAction: { kind: 'REFUND_CAPTURE', params: { chargeId: c.chargeId } },
+      };
   }
 }
 
@@ -103,6 +108,7 @@ export const EXPECTED_ACTION: Record<CaseType, string> = {
   PAYMENT_WITHOUT_ORDER: 'MARK_ORDER_PAID',
   DUPLICATE_WEBHOOK: 'IGNORE_DUPLICATE',
   AMOUNT_MISMATCH: 'FLAG_ERP_DIVERGENCE',
+  CAPTURE_ON_CANCELED_ORDER: 'REFUND_CAPTURE',
 };
 
 /** Pede a investigação e espera o worker terminar. */

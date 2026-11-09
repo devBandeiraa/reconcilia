@@ -37,6 +37,7 @@ function factsFrom(outputs: Record<string, Record<string, unknown>>): Facts {
     status?: string;
     totalCents?: number;
     installments?: number;
+    canceledAt?: string | null;
   };
   const events = (outputs.getGatewayEvents?.events ?? []) as GatewayEvent[];
   const captures = (outputs.getGatewayStatement?.captures ?? []) as {
@@ -57,6 +58,7 @@ function factsFrom(outputs: Record<string, Record<string, unknown>>): Facts {
     orderStatus: order.status ?? '',
     totalCents: order.totalCents ?? 0,
     installments: order.installments ?? 0,
+    canceledAt: order.canceledAt ?? 'não cancelado',
     chargeId: captures[0]?.chargeId ?? '',
     capturedAt: captures[0]?.capturedAt ?? '',
     capturedCents,

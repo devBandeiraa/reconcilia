@@ -37,6 +37,8 @@ beforeAll(async () => {
   cases.dup0 = await caseOf(prisma, 'DUPLICATE_WEBHOOK', 0);
   cases.mis0 = await caseOf(prisma, 'AMOUNT_MISMATCH', 0);
   cases.mis1 = await caseOf(prisma, 'AMOUNT_MISMATCH', 1);
+  cases.can0 = await caseOf(prisma, 'CAPTURE_ON_CANCELED_ORDER', 0);
+  cases.can1 = await caseOf(prisma, 'CAPTURE_ON_CANCELED_ORDER', 1);
 });
 
 afterAll(async () => {
@@ -72,6 +74,21 @@ const reject = (id: string, decidedBy = 'ana@loja.com', reason?: string) =>
 
 const ledgerEntriesOf = (transactionId: string) =>
   prisma.ledgerEntry.count({ where: { transactionId } });
+/** Saldo do GATEWAY_RECEIVABLE (débitos - créditos) só nas transações do pedido. */
+async function receivableOf(orderExternalId: string, chargeId: string): Promise<number> {
+  const entries = await prisma.ledgerEntry.findMany({
+    where: {
+      account: 'GATEWAY_RECEIVABLE',
+      transactionId: {
+        in: [`capture:evt_${orderExternalId}_captured`, `refund-capture:${chargeId}`],
+      },
+    },
+  });
+  return entries.reduce(
+    (sum, e) => sum + (e.direction === 'DEBIT' ? e.amountCents : -e.amountCents),
+    0,
+  );
+}
 const auditEvents = async (actionId: string) =>
   (await prisma.auditEntry.findMany({ where: { actionId }, orderBy: { at: 'asc' } })).map(
     (a) => a.event,
@@ -178,6 +195,48 @@ describe('aprovar: o backend executa', () => {
     expect(res.action.executionResult).toMatchObject({ ignored: true });
   });
 
+  it('REFUND_CAPTURE: estorna a captura do pedido cancelado e zera o recebível dele', async () => {
+    const c = cases.can0!;
+    expect(await receivableOf(c.orderExternalId, c.chargeId)).toBe(c.capturedCents);
+    const action = await pendingAction(c.caseId, 'REFUND_CAPTURE', { chargeId: c.chargeId });
+
+    const res = ActionDecisionSchema.parse((await approve(action.id).expect(200)).body);
+
+    expect(res.case.status).toBe('RESOLVED');
+    expect(res.action.executionResult).toMatchObject({
+      ledger: 'posted',
+      ledgerTransactionId: `refund-capture:${c.chargeId}`,
+      amountCents: c.capturedCents,
+    });
+    expect(await receivableOf(c.orderExternalId, c.chargeId)).toBe(0);
+    const refund = await prisma.ledgerEntry.findMany({
+      where: { transactionId: `refund-capture:${c.chargeId}` },
+      select: { account: true, direction: true, amountCents: true },
+      orderBy: { direction: 'asc' }, // ordem do enum: DEBIT antes de CREDIT
+    });
+    expect(refund).toEqual([
+      { account: 'REFUNDS', direction: 'DEBIT', amountCents: c.capturedCents },
+      { account: 'GATEWAY_RECEIVABLE', direction: 'CREDIT', amountCents: c.capturedCents },
+    ]);
+    expect(
+      await prisma.order.findUniqueOrThrow({ where: { externalId: c.orderExternalId } }),
+    ).toMatchObject({ status: 'CANCELED' });
+    expect(await auditEvents(action.id)).toEqual(['APPROVED', 'EXECUTED']);
+  });
+
+  it('REFUND_CAPTURE: duas aprovações em paralelo e uma segunda ação estornam uma vez só', async () => {
+    const c = cases.can1!;
+    const first = await pendingAction(c.caseId, 'REFUND_CAPTURE', { chargeId: c.chargeId });
+    await Promise.all([approve(first.id).expect(200), approve(first.id).expect(200)]);
+    // Outra investigação sugeriu o mesmo estorno: o transactionId é da cobrança, não da ação.
+    const second = await pendingAction(c.caseId, 'REFUND_CAPTURE', { chargeId: c.chargeId });
+    const res = ActionDecisionSchema.parse((await approve(second.id).expect(200)).body);
+
+    expect(res.action.executionResult).toMatchObject({ ledger: 'already-posted' });
+    expect(await ledgerEntriesOf(`refund-capture:${c.chargeId}`)).toBe(2);
+    expect(await receivableOf(c.orderExternalId, c.chargeId)).toBe(0);
+  });
+
   it('a conciliação não reabre os casos resolvidos', async () => {
     const result = ReconciliationResultSchema.parse(
       (await request(server).post('/reconcile').expect(200)).body,
@@ -187,6 +246,7 @@ describe('aprovar: o backend executa', () => {
     for (const [c, type] of [
       [cases.dup0!, 'DUPLICATE_WEBHOOK'],
       [cases.mis0!, 'AMOUNT_MISMATCH'],
+      [cases.can0!, 'CAPTURE_ON_CANCELED_ORDER'],
     ] as const) {
       expect(
         await prisma.case.count({
@@ -246,6 +306,17 @@ describe('recusar e erros', () => {
     expect(await prisma.case.findUniqueOrThrow({ where: { id: c.caseId } })).toMatchObject({
       status: 'OPEN',
     });
+  });
+
+  it('REFUND_CAPTURE num pedido que não está cancelado → 422 e nada muda', async () => {
+    const c = cases.pwo3!;
+    const action = await pendingAction(c.caseId, 'REFUND_CAPTURE', { chargeId: c.chargeId });
+    const before = await checksum();
+
+    const res = await approve(action.id).expect(422);
+
+    expect((res.body as { message: string }).message).toMatch(/só se estorna pedido CANCELED/);
+    expect(await checksum()).toBe(before);
   });
 
   it('ação inexistente → 404; corpo sem decidedBy → 400', async () => {
