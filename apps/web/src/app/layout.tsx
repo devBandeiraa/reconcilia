@@ -7,15 +7,31 @@ import './globals.css';
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 
+const DESCRIPTION =
+  'Encontra pagamentos que não batem entre loja, gateway e ERP. A IA sugere; uma pessoa aprova.';
+
+// A imagem da prévia vem de app/opengraph-image.tsx e app/twitter-image.tsx. Na Vercel, o Next
+// usa a URL do projeto como base dos links absolutos; localmente, http://localhost:3000.
 export const metadata: Metadata = {
   title: { default: 'Reconcilia', template: '%s · Reconcilia' },
-  description:
-    'Encontra pagamentos que não batem entre loja, gateway e ERP. A IA sugere; uma pessoa aprova.',
+  description: DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    locale: 'pt_BR',
+    siteName: 'Reconcilia',
+    title: 'Reconcilia',
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Reconcilia',
+    description: DESCRIPTION,
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="pt-BR" className={cn('dark font-sans', geist.variable)}>
+    <html lang="pt-BR" className={cn('font-sans', geist.variable)}>
       <body className="bg-background text-foreground min-h-dvh antialiased">
         <a
           href="#conteudo"

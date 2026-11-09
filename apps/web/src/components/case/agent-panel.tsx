@@ -67,7 +67,7 @@ function Confidence({ value }: { value: number }) {
         <span className="tabular-nums">{percent}%</span>
       </div>
       <div className="bg-muted h-2 overflow-hidden rounded-full" aria-hidden="true">
-        <div className="h-full rounded-full bg-sky-400" style={{ width: `${percent}%` }} />
+        <div className="bg-primary h-full rounded-full" style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
@@ -269,7 +269,7 @@ function InvestigationBody({
           <ol className="space-y-2 text-sm">
             {investigation.steps.map((step, i) => (
               <li key={i} className="bg-muted/40 rounded-md p-2">
-                <span className="font-mono text-xs text-sky-300">{step.tool}</span>
+                <span className="text-muted-foreground font-mono text-xs">{step.tool}</span>
                 <p className="text-muted-foreground mt-0.5">{step.summary}</p>
               </li>
             ))}

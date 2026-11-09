@@ -1,41 +1,54 @@
 import type { CaseStatus, CaseType } from '@reconcilia/shared';
+import { Ban, CircleDollarSign, Copy, EqualNot, type LucideIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { CASE_STATUS_LABEL, CASE_TYPE_LABEL } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-/** Cor por tipo, sempre com o texto junto (a cor sozinha não carrega informação). */
-const TYPE_STYLE: Record<CaseType, string> = {
-  PAYMENT_WITHOUT_ORDER: 'border-sky-500/40 bg-sky-500/10 text-sky-300',
-  DUPLICATE_WEBHOOK: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
-  AMOUNT_MISMATCH: 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300',
-  CAPTURE_ON_CANCELED_ORDER: 'border-rose-500/40 bg-rose-500/10 text-rose-300',
+/**
+ * Regra de cor (ADR 0013): cor só para status. O tipo de divergência é neutro, com ícone e
+ * rótulo; assim a mesma cor nunca tem dois sentidos na mesma linha.
+ */
+export const CASE_TYPE_ICON: Record<CaseType, LucideIcon> = {
+  PAYMENT_WITHOUT_ORDER: CircleDollarSign,
+  DUPLICATE_WEBHOOK: Copy,
+  AMOUNT_MISMATCH: EqualNot,
+  CAPTURE_ON_CANCELED_ORDER: Ban,
 };
 
-const STATUS_STYLE: Record<CaseStatus, string> = {
-  OPEN: 'border-orange-500/40 bg-orange-500/10 text-orange-300',
-  RESOLVED: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
-  DISMISSED: 'border-zinc-500/40 bg-zinc-500/10 text-zinc-300',
-};
-
-export function CaseTypeBadge({ type }: { type: CaseType }) {
+export function CaseTypeLabel({ type, className }: { type: CaseType; className?: string }) {
+  const Icon = CASE_TYPE_ICON[type];
   return (
-    <Badge variant="outline" className={cn('font-normal', TYPE_STYLE[type])}>
+    <span className={cn('inline-flex items-center gap-1.5 text-sm', className)}>
+      <Icon className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
       {CASE_TYPE_LABEL[type]}
-    </Badge>
+    </span>
   );
 }
 
-export function CaseStatusBadge({ status }: { status: CaseStatus }) {
+/** Aberto = atenção (âmbar), Resolvido = ok (verde), Descartado = cinza. Sempre com texto. */
+const STATUS_STYLE: Record<CaseStatus, string> = {
+  OPEN: 'border-status-attention/35 bg-status-attention/12 text-status-attention',
+  RESOLVED: 'border-status-ok/35 bg-status-ok/12 text-status-ok',
+  DISMISSED: 'border-status-muted/35 bg-status-muted/12 text-status-muted',
+};
+
+/**
+ * Selo de status. `discreet`: quando o filtro já diz qual é o status (ex.: só abertos), a linha
+ * mostra só o texto, sem selo colorido, para a cor não virar ruído.
+ */
+export function CaseStatusBadge({
+  status,
+  discreet = false,
+}: {
+  status: CaseStatus;
+  discreet?: boolean;
+}) {
+  if (discreet) {
+    return <span className="text-muted-foreground text-sm">{CASE_STATUS_LABEL[status]}</span>;
+  }
   return (
     <Badge variant="outline" className={cn('font-normal', STATUS_STYLE[status])}>
       {CASE_STATUS_LABEL[status]}
     </Badge>
   );
 }
-
-export const CASE_TYPE_ACCENT: Record<CaseType, string> = {
-  PAYMENT_WITHOUT_ORDER: 'text-sky-300',
-  DUPLICATE_WEBHOOK: 'text-amber-300',
-  AMOUNT_MISMATCH: 'text-fuchsia-300',
-  CAPTURE_ON_CANCELED_ORDER: 'text-rose-300',
-};

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 312 72" width="312" height="72" role="img" aria-labelledby="titulo">
+  <title id="titulo">Reconcilia</title>
+  <style>
+    .marca { stroke: #1a7f37; }
+    .palavra { fill: #111820; }
+    @media (prefers-color-scheme: dark) {
+      .marca { stroke: #3fb950; }
+      .palavra { fill: #e8edf2; }
+    }
+  </style>
+  <g class="marca" fill="none" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" transform="translate(4 4) scale(2)">
+    <path d="M5 11.5H18"/>
+    <path d="M5 19.5H12L15.5 23L26 8"/>
+  </g>
+  <text class="palavra" x="76" y="49" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="38" font-weight="600" letter-spacing="-0.5">Reconcilia</text>
+</svg>

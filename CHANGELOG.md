@@ -7,6 +7,38 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.11.0] - 2026-11-09
+
+### Adicionado
+
+- Identidade visual (ADR 0013):
+  - símbolo do sinal de igual cujo traço de baixo vira um visto, favicon (`app/icon.svg`), logo
+    no cabeçalho e `docs/img/logo.svg` no topo do README;
+  - tokens de cor no `globals.css`: `--primary` e `--ring` no verde da marca e os semânticos
+    `--status-attention`, `--status-ok` e `--status-muted`, nos temas claro e escuro.
+- Prévia de link: `app/opengraph-image.tsx` e `app/twitter-image.tsx` (1200×630, com o símbolo,
+  "A IA sugere. Uma pessoa aprova." e "loja · gateway · ERP") e metadata `openGraph` e
+  `twitter` (`summary_large_image`).
+- Script de capturas com Playwright (`pnpm --filter @reconcilia/web capturas`), que grava as
+  quatro capturas e o `fluxo.gif` a partir de um banco vazio. Dependências de desenvolvimento:
+  `playwright`, `pngjs` e `gifenc`.
+
+### Alterado
+
+- Regra de cor nas telas: cor só para status (Aberto em atenção, Resolvido em ok, Descartado em
+  cinza). Tipos de divergência viram ícone e rótulo, sem cor própria. Com o filtro já fixando o
+  status, a linha mostra o status como texto, sem selo.
+- Contadores do topo com número neutro e o ícone do tipo, em uma linha a partir da tela média.
+- Barra de confiança do agente na cor da marca; nomes das ferramentas nos passos em cinza.
+- O tema passa a seguir o sistema (`prefers-color-scheme`) em vez de forçar o escuro.
+- Anel de foco dos componentes na cor cheia da marca (era 50%).
+- Capturas e GIF do README refeitos com a identidade nova (o GIF caiu de 830 KB para 260 KB).
+
+### Removido
+
+- Todas as cores fixas do Tailwind nas telas (`sky`, `amber`, `fuchsia`, `rose`, `orange`,
+  `emerald`, `zinc`, `red`) e os tokens não usados do shadcn (`chart-*`, `sidebar-*`).
+
 ## [0.10.0] - 2026-11-08
 
 ### Adicionado
@@ -263,7 +295,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
   formulários de issue.
 - ADR 0001: monorepo com pnpm workspaces.
 
-[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.10.0...HEAD
+[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.7.0...v0.8.0

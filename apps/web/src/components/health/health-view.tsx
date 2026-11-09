@@ -70,7 +70,7 @@ function Ledger() {
       <p
         className={
           balanced
-            ? 'flex items-center gap-2 text-sm text-emerald-300'
+            ? 'text-status-ok flex items-center gap-2 text-sm'
             : 'text-destructive flex items-center gap-2 text-sm'
         }
       >

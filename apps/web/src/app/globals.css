@@ -2,60 +2,76 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-@custom-variant dark (&:is(.dark *));
+/* O tema segue o sistema (prefers-color-scheme): sem classe .dark e sem flash na carga. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
 
+/*
+ * Regra de cor do Reconcilia: cor tem significado.
+ * - Marca (--primary, --ring): o verde do "conciliado". Botão principal, foco e a barra de
+ *   confiança do agente.
+ * - Status (--status-*): só para status. Aberto = atenção (âmbar), Resolvido = ok (verde),
+ *   Descartado = cinza. Tipos de divergência ficam neutros (ícone + rótulo).
+ * - Todos os pares de texto passam WCAG AA (4.5:1); foco e barras passam 3:1. Ver ADR 0013.
+ */
 :root {
-  color-scheme: dark;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #111820;
+  --card: #ffffff;
+  --card-foreground: #111820;
+  --popover: #ffffff;
+  --popover-foreground: #111820;
+  --primary: #1a7f37;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f4f6;
+  --secondary-foreground: #111820;
+  --muted: #f2f4f6;
+  --muted-foreground: #5a6470;
+  --accent: #f2f4f6;
+  --accent-foreground: #111820;
+  --destructive: #b42129;
+  --border: #d8dee4;
+  --input: #d8dee4;
+  --ring: #1a7f37;
+  --status-attention: #8a5a00;
+  --status-ok: #157032;
+  --status-muted: #5a6470;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: #0c1014;
+    --foreground: #e8edf2;
+    --card: #141a21;
+    --card-foreground: #e8edf2;
+    --popover: #141a21;
+    --popover-foreground: #e8edf2;
+    --primary: #3fb950;
+    --primary-foreground: #04210c;
+    --secondary: #1d242c;
+    --secondary-foreground: #e8edf2;
+    --muted: #1d242c;
+    --muted-foreground: #98a2ad;
+    --accent: #1d242c;
+    --accent-foreground: #e8edf2;
+    --destructive: #f47067;
+    --border: #2b333d;
+    --input: #2b333d;
+    --ring: #3fb950;
+    --status-attention: #e3b341;
+    --status-ok: #3fb950;
+    --status-muted: #98a2ad;
+  }
 }
 
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
+  --color-status-attention: var(--status-attention);
+  --color-status-ok: var(--status-ok);
+  --color-status-muted: var(--status-muted);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -83,40 +99,6 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -126,5 +108,9 @@
   }
   html {
     @apply font-sans;
+  }
+  /* Foco visível na cor da marca (3:1 contra o fundo nos dois temas). */
+  :focus-visible {
+    @apply outline-ring outline-2 outline-offset-2;
   }
 }
