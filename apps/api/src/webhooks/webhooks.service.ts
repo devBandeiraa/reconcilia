@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import type {
   ErpEventType as ExternalErpType,
   ErpWebhook,
@@ -7,7 +7,7 @@ import type {
   StoreWebhook,
 } from '@reconcilia/shared';
 import { fromPrisma } from 'pg-boss';
-import { ErpEventType, PaymentEventType } from '../generated/prisma/client.js';
+import { ErpEventType, OrderStatus, PaymentEventType } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PAYMENT_EVENTS_QUEUE, type PaymentEventJob } from '../queue/queue.constants.js';
 import { QueueService } from '../queue/queue.service.js';
@@ -41,12 +41,33 @@ export class WebhooksService {
   ) {}
 
   async receiveStore(event: StoreWebhook): Promise<IngestResult> {
+    if (event.type === 'order.canceled') return this.cancelOrder(event);
     const { externalId, totalCents, installments } = event.order;
     const { count } = await this.prisma.order.createMany({
       data: [{ externalId, totalCents, installments }],
       skipDuplicates: true,
     });
     return { duplicate: count === 0 };
+  }
+
+  /**
+   * Cancela só um pedido PENDING (UPDATE condicional): reenviar o cancelamento não muda nada.
+   * Cancelar um pedido já pago exigiria estorno na loja, fora do escopo: também não muda nada.
+   */
+  private async cancelOrder(
+    event: Extract<StoreWebhook, { type: 'order.canceled' }>,
+  ): Promise<IngestResult> {
+    const { externalId } = event.order;
+    const { count } = await this.prisma.order.updateMany({
+      where: { externalId, status: OrderStatus.PENDING },
+      data: { status: OrderStatus.CANCELED, canceledAt: new Date(event.occurredAt) },
+    });
+    if (count === 1) return { duplicate: false };
+    const exists = await this.prisma.order.count({ where: { externalId } });
+    if (!exists) {
+      throw new ConflictException(`Pedido ${externalId} ainda não existe; reenvie o cancelamento`);
+    }
+    return { duplicate: true };
   }
 
   /** Grava e enfileira na MESMA transação: nunca sobra evento sem job nem job sem evento. */

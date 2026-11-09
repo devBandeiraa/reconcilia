@@ -15,6 +15,7 @@ export const ReconciliationResultSchema = z.object({
     PAYMENT_WITHOUT_ORDER: z.number().int(),
     DUPLICATE_WEBHOOK: z.number().int(),
     AMOUNT_MISMATCH: z.number().int(),
+    CAPTURE_ON_CANCELED_ORDER: z.number().int(),
   }),
   /** Divergências detectadas que já tinham caso aberto (ignoradas pelo índice parcial). */
   alreadyOpen: z.number().int(),
@@ -96,6 +97,8 @@ export const CaseDetailSchema = z.object({
     totalCents: cents,
     installments: z.number().int(),
     createdAt: isoDateTime,
+    /** Quando a loja cancelou (só pedidos CANCELED que vieram de um order.canceled). */
+    canceledAt: isoDateTime.nullable(),
   }),
   /** Loja, gateway, extrato e ERP em ordem cronológica. */
   timeline: z.array(TimelineItemSchema),

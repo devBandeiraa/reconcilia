@@ -129,8 +129,23 @@ export class CasesService {
       duplicate: false,
       processedAt: null,
     };
+    const orderCanceled: TimelineItem[] = row.order.canceledAt
+      ? [
+          {
+            at: row.order.canceledAt.toISOString(),
+            source: 'STORE',
+            type: 'ORDER_CANCELED',
+            amountCents: row.order.totalCents,
+            eventId: null,
+            receivedCount: null,
+            duplicate: false,
+            processedAt: null,
+          },
+        ]
+      : [];
     const timeline: TimelineItem[] = [
       orderCreated,
+      ...orderCanceled,
       ...paymentEvents.map((event): TimelineItem => ({
         at: sourceTime(event.payload, event.receivedAt),
         source: 'GATEWAY',
@@ -209,6 +224,7 @@ export class CasesService {
         totalCents: row.order.totalCents,
         installments: row.order.installments,
         createdAt: row.order.createdAt.toISOString(),
+        canceledAt: row.order.canceledAt?.toISOString() ?? null,
       },
       timeline,
       history,

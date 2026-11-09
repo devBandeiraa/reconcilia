@@ -12,7 +12,8 @@ const prisma = createTestPrisma();
 let app: INestApplication;
 let server: Server;
 
-const order = generateScenario({ orders: 1, lost: 0, duplicate: 0, mismatch: 1 }, 99).orders[0]!;
+const order = generateScenario({ orders: 1, lost: 0, duplicate: 0, mismatch: 1, canceled: 0 }, 99)
+  .orders[0]!;
 const messages = buildMessages(order, new Date('2026-01-01T12:00:00.000Z'));
 
 beforeAll(async () => {
@@ -44,6 +45,21 @@ describe('webhooks', () => {
       installments: order.installments,
       status: 'PENDING',
     });
+  });
+
+  it('loja: cancela o pedido PENDING uma vez; reenvio não muda nada', async () => {
+    await post(PATHS.store, messages.store).expect(202);
+    await post(PATHS.store, messages.canceled).expect(202, { received: true, duplicate: false });
+    await post(PATHS.store, messages.canceled).expect(200, { received: true, duplicate: true });
+
+    expect(
+      await prisma.order.findUniqueOrThrow({ where: { externalId: order.externalId } }),
+    ).toMatchObject({ status: 'CANCELED', canceledAt: new Date(messages.canceled.occurredAt) });
+  });
+
+  it('loja: cancelar um pedido que ainda não existe → 409, para a loja reenviar', async () => {
+    await post(PATHS.store, messages.canceled).expect(409);
+    expect(await prisma.order.count()).toBe(0);
   });
 
   it('gateway: grava o evento traduzido para o modelo interno e um reenvio não duplica', async () => {

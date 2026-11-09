@@ -5,6 +5,7 @@ export const CASE_TYPES = [
   'PAYMENT_WITHOUT_ORDER',
   'DUPLICATE_WEBHOOK',
   'AMOUNT_MISMATCH',
+  'CAPTURE_ON_CANCELED_ORDER',
 ] as const;
 export type CaseType = (typeof CASE_TYPES)[number];
 
@@ -17,10 +18,12 @@ export const SimulationOptionsSchema = z
     lost: rate.default(0.1),
     duplicate: rate.default(0.15),
     mismatch: rate.default(0.1),
+    /** Pedido cancelado na loja antes de o gateway capturar. */
+    canceled: rate.default(0.1),
     seed: z.number().int().min(0).max(2_147_483_647).optional(),
   })
-  .refine((o) => o.lost + o.duplicate + o.mismatch <= 1, {
-    message: 'lost + duplicate + mismatch deve ser no máximo 1 (uma falha por pedido)',
+  .refine((o) => o.lost + o.duplicate + o.mismatch + o.canceled <= 1, {
+    message: 'lost + duplicate + mismatch + canceled deve ser no máximo 1 (uma falha por pedido)',
     path: ['lost'],
   });
 export type SimulationOptionsInput = z.input<typeof SimulationOptionsSchema>;
@@ -40,11 +43,17 @@ export const GabaritoEntrySchema = z.discriminatedUnion('caseType', [
     orderCents: z.number().int(),
     erpCents: z.number().int(),
   }),
+  z.object({
+    caseType: z.literal('CAPTURE_ON_CANCELED_ORDER'),
+    orderExternalId: z.string(),
+    capturedCents: z.number().int(),
+  }),
 ]);
 export type GabaritoEntry = z.infer<typeof GabaritoEntrySchema>;
 
 export const DeliveryTotalsSchema = z.object({
   orders: z.number().int(),
+  cancellations: z.number().int(),
   authorizations: z.number().int(),
   captures: z.number().int(),
   duplicateCopies: z.number().int(),

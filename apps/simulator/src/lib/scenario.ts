@@ -5,12 +5,13 @@ import {
 } from '@reconcilia/shared';
 import { createRandom } from './random.js';
 
-export type Failure = 'lost' | 'duplicate' | 'mismatch';
+export type Failure = 'lost' | 'duplicate' | 'mismatch' | 'canceled';
 
 export interface PlannedOrder {
   externalId: string;
   totalCents: number;
   installments: number;
+  /** canceled: a loja cancela o pedido antes da captura, mas o gateway captura assim mesmo. */
   failure: Failure | null;
   /** Quantas vezes o webhook charge.captured é enviado. 0 = perdido. */
   captureCopies: number;
@@ -51,6 +52,9 @@ export function generateScenario(input: SimulationOptionsInput, seed: number): S
     if (roll < options.lost) failure = 'lost';
     else if (roll < options.lost + options.duplicate) failure = 'duplicate';
     else if (roll < options.lost + options.duplicate + options.mismatch) failure = 'mismatch';
+    else if (roll < options.lost + options.duplicate + options.mismatch + options.canceled) {
+      failure = 'canceled';
+    }
 
     orders.push({
       externalId: orderExternalId(seed, index),
@@ -87,6 +91,14 @@ function toGabaritoEntry(order: PlannedOrder): GabaritoEntry[] {
           orderExternalId: order.externalId,
           orderCents: order.totalCents,
           erpCents: order.erpCents,
+        },
+      ];
+    case 'canceled':
+      return [
+        {
+          caseType: 'CAPTURE_ON_CANCELED_ORDER',
+          orderExternalId: order.externalId,
+          capturedCents: order.totalCents,
         },
       ];
     case null:

@@ -16,17 +16,25 @@ const reference = z.string().min(1).max(64);
 const eventId = z.string().min(1).max(128);
 const installments = z.number().int().min(1).max(24);
 
-/** Loja → api: pedido criado. */
-export const StoreWebhookSchema = z.object({
-  id: eventId,
-  type: z.literal('order.created'),
-  occurredAt: isoDateTime,
-  order: z.object({
-    externalId: reference,
-    totalCents: cents,
-    installments,
+/** Loja → api: pedido criado ou cancelado. */
+export const StoreWebhookSchema = z.discriminatedUnion('type', [
+  z.object({
+    id: eventId,
+    type: z.literal('order.created'),
+    occurredAt: isoDateTime,
+    order: z.object({
+      externalId: reference,
+      totalCents: cents,
+      installments,
+    }),
   }),
-});
+  z.object({
+    id: eventId,
+    type: z.literal('order.canceled'),
+    occurredAt: isoDateTime,
+    order: z.object({ externalId: reference }),
+  }),
+]);
 export type StoreWebhook = z.infer<typeof StoreWebhookSchema>;
 
 export const GATEWAY_EVENT_TYPES = [

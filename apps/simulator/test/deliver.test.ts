@@ -79,6 +79,30 @@ describe('deliverScenario', () => {
     }
   });
 
+  it('nos pedidos cancelados, o order.canceled vem logo depois do order.created e antes do gateway', () => {
+    const canceled = scenario.orders.filter((o) => o.failure === 'canceled');
+    expect(canceled.length).toBeGreaterThan(0);
+    for (const order of canceled) {
+      const mine = calls.filter(
+        (c) =>
+          c.path !== PATHS.statement && JSON.stringify(c.body).includes(`"${order.externalId}"`),
+      );
+      expect(mine.slice(0, 3).map((c) => (c.body as { type: string }).type)).toEqual([
+        'order.created',
+        'order.canceled',
+        'charge.authorized',
+      ]);
+    }
+    const notCanceled = scenario.orders
+      .filter((o) => o.failure !== 'canceled')
+      .map((o) => o.externalId);
+    const cancellations = calls
+      .filter((c) => c.path === PATHS.store)
+      .map((c) => StoreWebhookSchema.parse(c.body))
+      .filter((e) => e.type === 'order.canceled');
+    expect(cancellations.some((e) => notCanceled.includes(e.order.externalId))).toBe(false);
+  });
+
   it('para cada pedido, a loja vem antes do gateway, que vem antes do ERP', () => {
     for (const order of scenario.orders) {
       const ref = order.externalId;
@@ -98,6 +122,7 @@ describe('deliverScenario', () => {
     const captured = scenario.orders.filter((o) => o.captureCopies > 0).length;
     expect(totals).toEqual({
       orders: 60,
+      cancellations: scenario.orders.filter((o) => o.failure === 'canceled').length,
       authorizations: 60,
       captures: captured,
       duplicateCopies: copies - captured,
@@ -124,10 +149,11 @@ describe('formatGabarito', () => {
     ]);
     expect(text.split('\n')).toEqual([
       'GABARITO · seed 1 · 4 pedidos',
-      'PAYMENT_WITHOUT_ORDER (1): S1-0001',
-      'DUPLICATE_WEBHOOK     (1): S1-0002 ×3',
-      'AMOUNT_MISMATCH       (0)',
-      'sem falha             (2)',
+      'PAYMENT_WITHOUT_ORDER     (1): S1-0001',
+      'DUPLICATE_WEBHOOK         (1): S1-0002 ×3',
+      'AMOUNT_MISMATCH           (0)',
+      'CAPTURE_ON_CANCELED_ORDER (0)',
+      'sem falha                 (2)',
     ]);
   });
 });
