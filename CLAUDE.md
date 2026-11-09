@@ -39,8 +39,9 @@ Restrição: CUSTO ZERO. Nenhum serviço pago, nenhuma dependência que exija ca
 6. Atualize a documentação (checklist abaixo).
 7. Abra o PR para a main com o modelo .github/pull_request_template.md. PARE e espere meu ok
    para fazer o merge.
-8. Depois do merge: tag anotada da versão, push da tag e release no GitHub com as notas do
-   CHANGELOG (`gh release create vX.Y.Z --notes-file <arquivo>`).
+8. Depois do merge: tag anotada da versão (`git tag -a vX.Y.Z -m "vX.Y.Z: <título>"`) e push da
+   tag. O workflow `.github/workflows/release.yml` cria a release com as notas do CHANGELOG;
+   não rode `gh release create` à mão. Confira a release criada.
 
 ## Pronto quando (Definition of Done de toda fase)
 - [ ] lint, typecheck e testes passam local e no CI
