@@ -87,13 +87,13 @@ export function signedPost(
   server: Server,
   path: string,
   body: unknown,
-  secret: string = DEV_WEBHOOK_SECRET,
+  { secret = DEV_WEBHOOK_SECRET, signedAt }: { secret?: string; signedAt?: Date } = {},
 ) {
   const rawBody = JSON.stringify(body);
   return request(server)
     .post(path)
     .set('content-type', 'application/json')
-    .set(SIGNATURE_HEADER, sign(secret, rawBody))
+    .set(SIGNATURE_HEADER, sign(secret, rawBody, signedAt))
     .send(rawBody);
 }
 

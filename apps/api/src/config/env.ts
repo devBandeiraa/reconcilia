@@ -24,6 +24,8 @@ export const EnvSchema = z
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }).default(LOCAL_DATABASE_URL),
     /** Segredo do HMAC dos webhooks (loja, gateway, ERP e extrato simulado). */
     WEBHOOK_SECRET: z.string().min(16).default(DEV_WEBHOOK_SECRET),
+    /** Idade máxima (passado ou futuro) do timestamp assinado no X-Signature. */
+    WEBHOOK_TOLERANCE_SECONDS: z.coerce.number().int().min(1).max(3600).default(300),
     /** Segredo do HMAC do token de operador (quem aprova ou recusa na demo). */
     SESSION_SECRET: z.string().min(16).default(DEV_SESSION_SECRET),
     /** Tentativas extras de um evento antes de ir para a DLQ. */

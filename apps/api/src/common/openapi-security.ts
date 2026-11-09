@@ -21,7 +21,7 @@ export function addOperatorToken(builder: DocumentBuilder): DocumentBuilder {
 /** Nome do esquema de segurança dos webhooks no OpenAPI. */
 export const WEBHOOK_SIGNATURE = 'webhookSignature';
 
-/** Documenta a assinatura HMAC dos webhooks. A verificação (401) entra na v0.4.0. */
+/** Documenta a assinatura HMAC dos webhooks, com timestamp assinado. */
 export function addWebhookSignature(builder: DocumentBuilder): DocumentBuilder {
   return builder.addApiKey(
     {
@@ -29,8 +29,9 @@ export function addWebhookSignature(builder: DocumentBuilder): DocumentBuilder {
       in: 'header',
       name: SIGNATURE_HEADER,
       description:
-        '`sha256=<hex>`: HMAC-SHA256 do corpo bruto com o WEBHOOK_SECRET. ' +
-        'Enviada pelo simulador; verificada pela api a partir da v0.4.0.',
+        '`t=<unix>,v1=<hex>`: v1 é o HMAC-SHA256 de `<t>.<corpo bruto>` com o WEBHOOK_SECRET. ' +
+        'Assinatura com mais de WEBHOOK_TOLERANCE_SECONDS (padrão 300) de diferença do relógio ' +
+        'da api é recusada com 401, mesmo com o HMAC certo.',
     },
     WEBHOOK_SIGNATURE,
   );

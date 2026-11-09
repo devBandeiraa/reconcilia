@@ -133,10 +133,17 @@ describe('deliverScenario', () => {
 });
 
 describe('sign', () => {
-  it('gera o HMAC-SHA256 no formato sha256=<hex>', () => {
-    // Vetor conhecido do HMAC-SHA256.
-    expect(sign('key', 'The quick brown fox jumps over the lazy dog')).toBe(
-      'sha256=f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8',
+  it('assina `<t>.<corpo>` no formato t=<unix>,v1=<hex>', () => {
+    const now = new Date(1_700_000_000_500); // os milissegundos são descartados
+    expect(sign('key', 'The quick brown fox jumps over the lazy dog', now)).toBe(
+      't=1700000000,v1=2f658d6aef4f246e91cd741bbcded7479e9605f9d41c9e248122a117e0e1765b',
+    );
+  });
+
+  it('o mesmo corpo em outro segundo tem outra assinatura', () => {
+    const body = '{"id":"evt_1"}';
+    expect(sign('key', body, new Date(1_700_000_000_000))).not.toBe(
+      sign('key', body, new Date(1_700_000_001_000)),
     );
   });
 });
