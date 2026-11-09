@@ -38,6 +38,7 @@ export const CASE_TYPE_LABEL: Record<CaseType, string> = {
   PAYMENT_WITHOUT_ORDER: 'Pagamento sem pedido',
   DUPLICATE_WEBHOOK: 'Webhook duplicado',
   AMOUNT_MISMATCH: 'Valor divergente',
+  CAPTURE_ON_CANCELED_ORDER: 'Captura em pedido cancelado',
 };
 
 export const CASE_STATUS_LABEL: Record<CaseStatus, string> = {
@@ -51,11 +52,13 @@ export const ACTION_LABEL: Record<ActionKind, string> = {
   REPROCESS_WEBHOOK: 'Reprocessar o webhook',
   FLAG_ERP_DIVERGENCE: 'Pedir ajuste ao ERP',
   IGNORE_DUPLICATE: 'Ignorar o duplicado',
+  REFUND_CAPTURE: 'Estornar a captura',
 };
 
 /** Nome legível de cada evento da linha do tempo. */
 export const EVENT_LABEL: Record<string, string> = {
   ORDER_CREATED: 'Pedido criado',
+  ORDER_CANCELED: 'Pedido cancelado',
   AUTHORIZED: 'charge.authorized',
   CAPTURED: 'charge.captured',
   REFUNDED: 'charge.refunded',
