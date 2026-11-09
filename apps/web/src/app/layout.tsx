@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="pt-BR" className={cn('dark font-sans', geist.variable)}>
+    <html lang="pt-BR" className={cn('font-sans', geist.variable)}>
       <body className="bg-background text-foreground min-h-dvh antialiased">
         <a
           href="#conteudo"
