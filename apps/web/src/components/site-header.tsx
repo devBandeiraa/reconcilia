@@ -3,6 +3,7 @@
 import { HealthResponseSchema } from '@reconcilia/shared';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { Logo } from '@/components/logo';
 import { endOperatorSession, useOperator } from '@/lib/operator';
 import { useApi } from '@/lib/use-api';
 import { cn } from '@/lib/utils';
@@ -53,8 +54,8 @@ export function SiteHeader() {
   return (
     <header className="border-b">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:gap-6">
-        <Link href="/casos" className="font-semibold tracking-tight">
-          Reconcilia
+        <Link href="/casos" aria-label="Reconcilia, início" className="rounded-md">
+          <Logo />
         </Link>
         <nav aria-label="Principal" className="flex gap-1">
           {LINKS.map((link) => {
