@@ -1,6 +1,6 @@
 <div align="center">
 
-# Reconcilia
+# <img src="docs/img/logo.svg" alt="Reconcilia" width="312">
 
 **Encontra pagamentos que não batem entre loja, gateway e ERP, e um agente de IA investiga
 cada caso. A IA sugere; uma pessoa aprova.**
@@ -16,10 +16,10 @@ Demo ao vivo (em construção) · Vídeo de 1 min (em construção) · Documenta
 
 </div>
 
-> **Status:** v0.10.0. Backend e interface completos: simulador, ingestão idempotente, ledger,
-> conciliação, agente de IA, aprovação humana com auditoria e as telas em Next.js. A v0.10.0
-> acrescenta a captura em pedido cancelado, o token de quem aprova e o timestamp assinado nos
-> webhooks. Falta o deploy; veja o [roadmap](#roadmap).
+> **Status:** v0.11.0. Backend e interface completos: simulador, ingestão idempotente, ledger,
+> conciliação, agente de IA, aprovação humana com auditoria e as telas em Next.js. A v0.11.0 dá
+> ao produto identidade visual: símbolo, favicon, prévia de link e uma regra de cor que só pinta
+> status. Falta o deploy; veja o [roadmap](#roadmap).
 
 ## O problema
 
@@ -503,7 +503,7 @@ Abra http://localhost:3000 com `pnpm dev` rodando. O caminho da demo cabe em um 
 1. **Casos:** "Gerar falhas" manda 30 pedidos com as quatro falhas pelo simulador, e "Conciliar
    agora" abre os casos. Os contadores por tipo filtram a lista.
 2. **Caso:** loja, gateway (com o extrato) e ERP lado a lado, e a linha do tempo com os
-   duplicados em âmbar. Os horários alternam entre UTC e o fuso da loja.
+   duplicados destacados em atenção. Os horários alternam entre UTC e o fuso da loja.
 3. **Agente:** "Investigar" mostra os passos enquanto o agente consulta os três lados, depois o
    diagnóstico, as evidências, a confiança e a ação sugerida.
 4. **Decisão:** na primeira vez, escolha um nome de operador (lembrado por 24h). "Aprovar" faz o
@@ -520,6 +520,29 @@ Toda resposta da api é validada com os schemas de `packages/shared`. Se a api d
 segundos (no plano gratuito ela dorme), a tela avisa "Acordando o servidor…" e tenta de novo
 sozinha por até 90 segundos. Os campos têm rótulo, o foco é visível, as mensagens de resultado
 são lidas pelo leitor de tela e a cor nunca é a única pista: todo selo tem texto.
+
+**Regra de cor** ([ADR 0013](docs/adr/0013-identidade-visual-e-regra-de-cor.md)). "Conciliar" é
+fazer bater, e a cor da marca é o verde do conciliado. A cor tem significado e só aparece para
+isso:
+
+| Cor                    | Onde aparece                                                    |
+| ---------------------- | --------------------------------------------------------------- |
+| Verde da marca         | Botão principal, foco, seleção e a barra de confiança do agente |
+| Atenção (âmbar)        | Status **Aberto** e o evento duplicado na linha do tempo        |
+| Ok (verde)             | Status **Resolvido** e o ledger fechando em zero                |
+| Cinza                  | Status **Descartado**                                           |
+| Nenhuma (ícone + nome) | Os tipos de divergência, nos selos e nos contadores             |
+
+Quando o filtro já é "Abertos", o status das linhas aparece como texto, sem selo colorido. O tema
+segue o sistema (claro ou escuro), e todos os pares de texto passam o contraste AA do WCAG nos
+dois. O link compartilhado tem prévia própria (`/opengraph-image`, 1200×630).
+
+As capturas e o GIF acima saem de um script, com a api em modo demonstração e um banco vazio:
+
+```bash
+pnpm --filter @reconcilia/web exec playwright install chromium   # só na primeira vez
+pnpm --filter @reconcilia/web capturas
+```
 
 ## Testes
 
@@ -689,6 +712,7 @@ sistema externo e não faz parte do modelo do Reconcilia.
 - [ADR 0010: captura em pedido cancelado](docs/adr/0010-captura-em-pedido-cancelado.md)
 - [ADR 0011: identidade do operador](docs/adr/0011-identidade-do-operador.md)
 - [ADR 0012: timestamp assinado nos webhooks](docs/adr/0012-timestamp-assinado-nos-webhooks.md)
+- [ADR 0013: identidade visual e regra de cor](docs/adr/0013-identidade-visual-e-regra-de-cor.md)
 
 ## Limitações conhecidas
 
@@ -714,10 +738,11 @@ sistema externo e não faz parte do modelo do Reconcilia.
   quem garante uma única aplicação continua sendo a idempotência pelo banco. A janela também
   exige que o relógio do remetente e o da api estejam com no máximo 5 minutos de diferença.
 - `GET /admin/dlq` não tem autenticação; a proteção da demo pública entra na fase 10.
-- A interface não tem testes automatizados de tela. A da v0.9.0 foi conferida no navegador
-  (desktop e celular), com o fluxo completo de ponta a ponta. As mudanças de tela da v0.10.0
-  (nome de operador, o tipo novo e o estorno) passaram por typecheck e lint e foram exercitadas
-  pela api, mas ainda não no navegador; as capturas novas entram na v0.11.0.
+- A interface não tem testes automatizados de tela. O script de capturas percorre o fluxo
+  completo no navegador (gerar falhas, conciliar, investigar, escolher o operador e aprovar) e
+  falha se algum passo não aparecer, mas não roda no CI.
+- A prévia de link usa a fonte padrão do `ImageResponse` do Next, em um peso só: carregar a Geist
+  na imagem exigiria baixar a fonte no build.
 - `NEXT_PUBLIC_API_URL` é embutida no build da web: trocar a api exige um novo build.
 - O gateway, a loja e o ERP são simulados. O extrato do gateway mora numa tabela do próprio
   banco (`sim_gateway_statement`), no lugar da API de conciliação de um gateway real.
@@ -740,7 +765,7 @@ sistema externo e não faz parte do modelo do Reconcilia.
 | v0.8.0  | Aprovação humana e execução                                                | ✅     |
 | v0.9.0  | Telas em Next.js                                                           | ✅     |
 | v0.10.0 | Captura em pedido cancelado, token de quem aprova e timestamp nos webhooks | ✅     |
-| v0.11.0 | Identidade visual, prévia de link e capturas                               | 🚧     |
+| v0.11.0 | Identidade visual, prévia de link e capturas                               | ✅     |
 | v1.0.0  | No ar + README final                                                       | 🚧     |
 | v1.1.0  | RAG com casos parecidos e runbook (opcional)                               | 🚧     |
 
