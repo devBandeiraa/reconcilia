@@ -68,6 +68,7 @@ function CounterCard({
   value,
   icon: Icon,
   iconClassName = 'text-muted-foreground',
+  className,
   pressed,
   onClick,
 }: {
@@ -76,6 +77,7 @@ function CounterCard({
   value: number | undefined;
   icon: LucideIcon;
   iconClassName?: string;
+  className?: string;
   pressed: boolean;
   onClick: () => void;
 }) {
@@ -87,6 +89,7 @@ function CounterCard({
       className={cn(
         'bg-card hover:bg-muted/50 focus-visible:ring-ring flex flex-col justify-between rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none',
         pressed && 'ring-ring ring-2',
+        className,
       )}
     >
       <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
@@ -274,7 +277,7 @@ export function CasesView() {
 
       <section
         aria-label="Casos abertos por tipo"
-        className="grid grid-cols-2 gap-3 lg:grid-cols-5"
+        className="grid grid-cols-2 gap-3 md:grid-cols-5"
       >
         {CASE_TYPES.map((t) => (
           <CounterCard
@@ -293,6 +296,7 @@ export function CasesView() {
           value={resolved}
           icon={CheckCircle2}
           iconClassName="text-status-ok"
+          className="col-span-2 md:col-span-1"
           pressed={type === 'ALL' && status === 'RESOLVED'}
           onClick={() => filter('ALL', status === 'RESOLVED' ? 'OPEN' : 'RESOLVED')}
         />
