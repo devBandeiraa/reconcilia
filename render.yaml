@@ -1,0 +1,46 @@
+# Blueprint do Render: a api (com o worker no mesmo processo) no plano Free.
+# No painel: New → Blueprint → este repositório. A branch escolhida ali é a que faz deploy.
+# Variáveis com `sync: false` são pedidas na criação; os segredos são gerados pelo Render.
+services:
+  - type: web
+    name: reconcilia-api
+    runtime: docker
+    plan: free
+    # Mesma região do Postgres na Neon (AWS us-east-1).
+    region: virginia
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      # Agente em modo demonstração: sem chave e sem custo. Para o Gemini real, DEMO_REPLAY=false
+      # e GEMINI_API_KEY.
+      - key: DEMO_REPLAY
+        value: 'true'
+      - key: DEMO_MAX_INVESTIGATIONS_PER_DAY
+        value: '50'
+      - key: STORE_TIMEZONE
+        value: America/Sao_Paulo
+      - key: RECONCILIATION_CRON
+        value: '*/5 * * * *'
+      # Polling mais espaçado: menos consultas mantendo o Postgres da Neon acordado.
+      - key: QUEUE_POLLING_SECONDS
+        value: '5'
+      - key: WEBHOOK_SECRET
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      # Neon: DATABASE_URL é a string com pooler (-pooler no host); DIRECT_URL, a direta.
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      # URL da web na Vercel, ex.: https://reconcilia.vercel.app (várias separadas por vírgula).
+      - key: CORS_ORIGIN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
