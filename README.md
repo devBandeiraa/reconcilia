@@ -5,7 +5,9 @@
 **Encontra pagamentos que não batem entre loja, gateway e ERP, e um agente de IA investiga
 cada caso. A IA sugere; uma pessoa aprova.**
 
-Demo ao vivo (em construção) · Vídeo de 1 min (em construção) · Documentação da API (em construção)
+**[Demo ao vivo](https://reconcilia-seven.vercel.app)** · [Documentação da API (Swagger)](https://reconcilia-api.onrender.com/docs) · [Saúde da api](https://reconcilia-api.onrender.com/health)
+
+<sub>A api roda no plano gratuito do Render e dorme sem uso: o primeiro acesso pode levar até 1 minuto, e a tela avisa enquanto ela acorda.</sub>
 
 [![CI](https://github.com/devBandeiraa/reconcilia/actions/workflows/ci.yml/badge.svg)](https://github.com/devBandeiraa/reconcilia/actions/workflows/ci.yml)
 [![versão](https://img.shields.io/github/v/release/devBandeiraa/reconcilia?label=vers%C3%A3o)](https://github.com/devBandeiraa/reconcilia/releases)
@@ -16,10 +18,9 @@ Demo ao vivo (em construção) · Vídeo de 1 min (em construção) · Documenta
 
 </div>
 
-> **Status:** v0.11.0. Backend e interface completos: simulador, ingestão idempotente, ledger,
-> conciliação, agente de IA, aprovação humana com auditoria e as telas em Next.js. A v0.11.0 dá
-> ao produto identidade visual: símbolo, favicon, prévia de link e uma regra de cor que só pinta
-> status. Falta o deploy; veja o [roadmap](#roadmap).
+> **Status:** v1.0.0, no ar. Simulador, ingestão idempotente, ledger, conciliação, agente de IA,
+> aprovação humana com auditoria e as telas em Next.js, publicados com custo zero: api e worker no
+> Render, Postgres na Neon e web na Vercel. Veja [No ar](#no-ar) e o [roadmap](#roadmap).
 
 ## O problema
 
@@ -113,10 +114,10 @@ só é executada depois que uma pessoa aprova.
 | Camada       | Escolha                              | Por quê                                                                                        | Limite do plano gratuito     |
 | ------------ | ------------------------------------ | ---------------------------------------------------------------------------------------------- | ---------------------------- |
 | Monorepo     | pnpm workspaces                      | Tipos compartilhados sem publicar pacote ([ADR 0001](docs/adr/0001-monorepo-pnpm.md))          | Sem custo                    |
-| API e worker | NestJS 12 + pino + Swagger           | DI e módulos claros; o worker roda no mesmo processo                                           | Render Free (em construção)  |
-| Web          | Next.js 16 (App Router) + Tailwind 4 | Renderização no servidor, deploy simples                                                       | Vercel Hobby (em construção) |
+| API e worker | NestJS 12 + pino + Swagger           | DI e módulos claros; o worker roda no mesmo processo                                           | Render Free                  |
+| Web          | Next.js 16 (App Router) + Tailwind 4 | Renderização no servidor, deploy simples                                                       | Vercel Hobby                 |
 | Contratos    | Zod 4                                | Um schema gera o tipo, a validação e o OpenAPI                                                 | Sem custo                    |
-| Banco        | PostgreSQL 17 + Prisma 7             | Garantias no banco ([ADR 0002](docs/adr/0002-garantias-no-banco.md)); fila no próprio Postgres | Neon (em construção)         |
+| Banco        | PostgreSQL 17 + Prisma 7             | Garantias no banco ([ADR 0002](docs/adr/0002-garantias-no-banco.md)); fila no próprio Postgres | Neon Free                    |
 | Testes       | Vitest + Supertest                   | Rápidos, com banco real via Docker Compose                                                     | Sem custo                    |
 | IA           | Gemini (`@google/genai`)             | Plano gratuito, atrás da interface `LlmClient`                                                 | Cota baixa; modo demo padrão |
 
@@ -550,7 +551,7 @@ pnpm --filter @reconcilia/web capturas
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-São **110 testes** hoje, contados pelo Vitest: **92 da api**, que rodam contra um PostgreSQL
+São **115 testes** hoje, contados pelo Vitest: **97 da api**, que rodam contra um PostgreSQL
 real, e **18 do simulador**. A web não tem testes automatizados (veja as
 [limitações](#limitações-conhecidas)). **Nenhum teste chama o modelo real**: o `LlmClient` é
 trocado por roteiros (`FakeLlmClient`).
@@ -608,9 +609,13 @@ trocado por roteiros (`FakeLlmClient`).
   mais de um `v1` válido, aceita.
 - **`POST /simulate` ponta a ponta (5):** o banco bate com o gabarito e a mesma seed de novo
   não grava nada novo.
+- **Proteção da demo (4):** a terceira chamada pesada no minuto e a sétima leitura dão 429 com
+  mensagem em português; health e webhooks ficam fora do limite; passado o teto diário, investigar
+  dá 429 sem criar nada.
 - **API (3):** o contrato do `/health` e o OpenAPI publicado em `/docs`.
-- **Env (6):** padrões, erro legível, `DATABASE_URL` que não é Postgres, os segredos de webhook e
-  de sessão em produção e a chave do Gemini fora do modo demonstração.
+- **Env (7):** padrões, erro legível, `DATABASE_URL` que não é Postgres, os segredos de webhook e
+  de sessão em produção, `CORS_ORIGIN` só https em produção e a chave do Gemini fora do modo
+  demonstração.
 
 Os testes de fila esperam retries reais (alguns segundos cada). Para isso, rodam com
 `QUEUE_RETRY_LIMIT=2`, `QUEUE_RETRY_DELAY_SECONDS=1` e polling de 0,5s.
@@ -622,6 +627,44 @@ gateway) e a assinatura `t=<unix>,v1=<hmac>`.
 Os testes usam um banco separado, `reconcilia_test`, que o Vitest cria e migra sozinho, então
 eles nunca apagam o banco de desenvolvimento. Para apontar para outro banco, use
 `TEST_DATABASE_URL`.
+
+## No ar
+
+| Parte        | Onde                             | Endereço                                                                     |
+| ------------ | -------------------------------- | ---------------------------------------------------------------------------- |
+| Web          | Vercel Hobby                     | [reconcilia-seven.vercel.app](https://reconcilia-seven.vercel.app)           |
+| API e worker | Render Free (Docker, Virginia)   | [reconcilia-api.onrender.com/docs](https://reconcilia-api.onrender.com/docs) |
+| Postgres     | Neon Free (AWS us-east-1, PG 17) | só a api acessa                                                              |
+
+```mermaid
+flowchart LR
+  U[Navegador] -->|HTTPS| V[Web na Vercel]
+  U -->|HTTPS, CORS só da Vercel| R[api + worker no Render]
+  R -->|pooler| N[(Postgres na Neon)]
+  R -.->|migrations na subida, conexão direta| N
+```
+
+- **Imagem da api** ([`apps/api/Dockerfile`](apps/api/Dockerfile)): multi-stage, roda como
+  usuário não root e aplica `prisma migrate deploy` antes de subir, porque o plano Free do Render
+  não tem pre-deploy. É idempotente: reiniciar o container não faz nada a mais.
+- **Infra como código:** [`render.yaml`](render.yaml) (Blueprint do Render, com os segredos de
+  webhook e de sessão gerados pelo próprio Render) e [`apps/web/vercel.json`](apps/web/vercel.json)
+  (build do monorepo). Na Vercel, o build falha se `NEXT_PUBLIC_API_URL` não for https.
+- **Banco:** a api usa a URL com pooler da Neon (`DATABASE_URL`) e as migrations usam a direta
+  (`DIRECT_URL`).
+- **Proteção da demo pública:**
+  - limite por IP de 120 requisições por minuto, e de 10 nas rotas pesadas (simular, conciliar e
+    investigar), com o IP real atrás do proxy do Render;
+  - teto de 50 investigações por dia (UTC), contado no banco;
+  - agente em modo demonstração por padrão, e o Gemini só com chave configurada;
+  - CORS só para a origem da Vercel, e em produção a api não sobe com `localhost` nem `http`.
+
+  O health e os webhooks (autenticados por HMAC) ficam fora do limite.
+
+- **Releases:** enviar a tag `vX.Y.Z` dispara [`release.yml`](.github/workflows/release.yml), que
+  publica a release com a seção do CHANGELOG.
+
+Decisões: [ADR 0014](docs/adr/0014-deploy-gratuito-e-protecao-da-demo.md).
 
 ## Arquitetura e decisões
 
@@ -713,9 +756,19 @@ sistema externo e não faz parte do modelo do Reconcilia.
 - [ADR 0011: identidade do operador](docs/adr/0011-identidade-do-operador.md)
 - [ADR 0012: timestamp assinado nos webhooks](docs/adr/0012-timestamp-assinado-nos-webhooks.md)
 - [ADR 0013: identidade visual e regra de cor](docs/adr/0013-identidade-visual-e-regra-de-cor.md)
+- [ADR 0014: deploy gratuito e proteção da demo](docs/adr/0014-deploy-gratuito-e-protecao-da-demo.md)
 
 ## Limitações conhecidas
 
+- **Cold start do plano gratuito:** o Render desliga a api depois de 15 minutos sem uso, e o
+  primeiro acesso seguinte leva cerca de 1 minuto. A tela mostra "Acordando o servidor…" e tenta
+  de novo sozinha por até 90 segundos. A Neon também suspende o banco sem uso e acorda em poucos
+  segundos.
+- **Agente em modo demonstração na demo pública:** os roteiros rodam as ferramentas de verdade,
+  mas o diagnóstico segue um modelo escrito à mão. O Gemini real exige `DEMO_REPLAY=false` e uma
+  chave; o plano gratuito dele tem cota baixa (veja abaixo).
+- **Limite por IP em memória:** vale para uma instância só, que é o que o plano Free tem. Com mais
+  de uma instância, o contador teria de ir para o banco.
 - **Quem aprova é identificação de demo, não autenticação real.** O nome de operador fica
   amarrado a um token assinado pela api (24h), e a auditoria registra o nome do token, não um
   campo livre em cada requisição. Mas não há cadastro nem senha: qualquer pessoa escolhe qualquer
@@ -737,7 +790,10 @@ sistema externo e não faz parte do modelo do Reconcilia.
 - O timestamp assinado barra o reenvio depois de 5 minutos, não dentro da janela. Dentro dela,
   quem garante uma única aplicação continua sendo a idempotência pelo banco. A janela também
   exige que o relógio do remetente e o da api estejam com no máximo 5 minutos de diferença.
-- `GET /admin/dlq` não tem autenticação; a proteção da demo pública entra na fase 10.
+- `GET /admin/dlq` não tem autenticação, só o limite por IP. Ela lista os eventos simulados que
+  esgotaram as tentativas, sem dado pessoal.
+- A demo pública não apaga dados sozinha: o projeto gratuito da Neon tem 1 GB, e cada "Gerar falhas" grava
+  cerca de 30 pedidos. Se encher, um `TRUNCATE` nas tabelas resolve.
 - A interface não tem testes automatizados de tela. O script de capturas percorre o fluxo
   completo no navegador (gerar falhas, conciliar, investigar, escolher o operador e aprovar) e
   falha se algum passo não aparecer, mas não roda no CI.
@@ -766,9 +822,9 @@ sistema externo e não faz parte do modelo do Reconcilia.
 | v0.9.0  | Telas em Next.js                                                           | ✅     |
 | v0.10.0 | Captura em pedido cancelado, token de quem aprova e timestamp nos webhooks | ✅     |
 | v0.11.0 | Identidade visual, prévia de link e capturas                               | ✅     |
-| v1.0.0  | No ar + README final                                                       | 🚧     |
+| v1.0.0  | No ar + README final                                                       | ✅     |
 | v1.1.0  | RAG com casos parecidos e runbook (opcional)                               | 🚧     |
 
 ## Autor
 
-Jhordan Bandeira · LinkedIn (em construção) · [GitHub](https://github.com/devBandeiraa)
+Jhordan Bandeira · [LinkedIn](https://www.linkedin.com/in/jhordan-bandeira/) · [GitHub](https://github.com/devBandeiraa)

@@ -7,6 +7,39 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [1.0.0] - 2026-11-09
+
+### Adicionado
+
+- No ar, com custo zero (ADR 0014): web em https://reconcilia-seven.vercel.app, api e worker em
+  https://reconcilia-api.onrender.com (Swagger em `/docs`) e Postgres 17 na Neon.
+- Imagem Docker da api (`apps/api/Dockerfile`): multi-stage, usuário não root e
+  `prisma migrate deploy` na subida.
+- `render.yaml` (Blueprint do Render, com os segredos gerados pelo Render) e
+  `apps/web/vercel.json` (build do monorepo na Vercel).
+- Proteção da demo pública:
+  - limite por IP com `@nestjs/throttler`: geral (`THROTTLE_PER_MINUTE`, 120) e nas rotas pesadas
+    (`THROTTLE_HEAVY_PER_MINUTE`, 10); health e webhooks ficam de fora;
+  - teto diário de investigações (`DEMO_MAX_INVESTIGATIONS_PER_DAY`, 50), com 429;
+  - `TRUST_PROXY_HOPS` para o IP real atrás do proxy.
+- Workflow de release (`.github/workflows/release.yml`): a tag `vX.Y.Z` publica a release com a
+  seção do CHANGELOG.
+- Seção "No ar" no README, com a arquitetura de deploy, e links reais para a demo e o Swagger.
+
+### Alterado
+
+- Em produção, `CORS_ORIGIN` só aceita origens https que não sejam `localhost`.
+- Na Vercel, o build da web falha sem `NEXT_PUBLIC_API_URL` https.
+- `prisma` passa a dependência de execução da api (as migrations rodam no container).
+- O passo 8 do fluxo no CLAUDE.md: a release sai do workflow ao enviar a tag.
+- 115 testes (97 da api e 18 do simulador).
+
+### Corrigido
+
+- Um `GET /cases` durante o `/simulate` podia responder 500 (P2028): as transações agora esperam
+  até 10 s por uma conexão do pool, em vez de 2 s.
+- Teste de "timestamp trocado" com corrida na virada do segundo.
+
 ## [0.11.0] - 2026-11-09
 
 ### Adicionado
@@ -295,7 +328,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
   formulários de issue.
 - ADR 0001: monorepo com pnpm workspaces.
 
-[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v0.11.0...HEAD
+[Não lançado]: https://github.com/devBandeiraa/reconcilia/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.11.0...v1.0.0
 [0.11.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/devBandeiraa/reconcilia/compare/v0.8.0...v0.9.0
