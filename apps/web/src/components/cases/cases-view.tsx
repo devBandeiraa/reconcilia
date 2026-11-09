@@ -9,10 +9,18 @@ import {
   ReconciliationResultSchema,
   SimulationResultSchema,
 } from '@reconcilia/shared';
-import { ChevronLeft, ChevronRight, Loader2, Scale, Sparkles } from 'lucide-react';
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  type LucideIcon,
+  Scale,
+  Sparkles,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import { CASE_TYPE_ACCENT, CaseStatusBadge, CaseTypeBadge } from '@/components/badges';
+import { CASE_TYPE_ICON, CaseStatusBadge, CaseTypeLabel } from '@/components/badges';
 import {
   EmptyState,
   ErrorState,
@@ -53,18 +61,21 @@ function useCount(type: CaseType | null, status: CaseStatus, version: number) {
   return useApi(`/cases?${params}`, CasePageSchema).data?.pagination.total;
 }
 
+/** Contador do topo: número neutro e o ícone do tipo. Só o de resolvidos leva cor (é status). */
 function CounterCard({
   label,
   hint,
   value,
-  accent,
+  icon: Icon,
+  iconClassName = 'text-muted-foreground',
   pressed,
   onClick,
 }: {
   label: string;
   hint: string;
   value: number | undefined;
-  accent: string;
+  icon: LucideIcon;
+  iconClassName?: string;
   pressed: boolean;
   onClick: () => void;
 }) {
@@ -78,16 +89,20 @@ function CounterCard({
         pressed && 'ring-ring ring-2',
       )}
     >
-      <span className="text-muted-foreground text-sm">{label}</span>
+      <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
+        <Icon className={cn('size-4 shrink-0', iconClassName)} aria-hidden="true" />
+        {label}
+      </span>
       <span className="mt-1 flex items-baseline gap-2">
-        <span className={cn('text-3xl font-semibold tabular-nums', accent)}>{value ?? '–'}</span>
+        <span className="text-3xl font-semibold tabular-nums">{value ?? '–'}</span>
         <span className="text-muted-foreground text-xs">{hint}</span>
       </span>
     </button>
   );
 }
 
-function CasesTable({ page }: { page: CasePage }) {
+/** `statusKnown`: o filtro já fixa o status (ex.: só abertos), então a linha o mostra discreto. */
+function CasesTable({ page, statusKnown }: { page: CasePage; statusKnown: boolean }) {
   return (
     <>
       {/* Desktop: tabela. */}
@@ -113,7 +128,7 @@ function CasesTable({ page }: { page: CasePage }) {
                 </Link>
               </TableCell>
               <TableCell>
-                <CaseTypeBadge type={c.type} />
+                <CaseTypeLabel type={c.type} />
               </TableCell>
               <TableCell className="text-right tabular-nums">{brl(c.amountCents)}</TableCell>
               <TableCell className="text-muted-foreground">
@@ -122,7 +137,7 @@ function CasesTable({ page }: { page: CasePage }) {
                 </time>
               </TableCell>
               <TableCell>
-                <CaseStatusBadge status={c.status} />
+                <CaseStatusBadge status={c.status} discreet={statusKnown} />
               </TableCell>
             </TableRow>
           ))}
@@ -142,8 +157,8 @@ function CasesTable({ page }: { page: CasePage }) {
                 <span className="tabular-nums">{brl(c.amountCents)}</span>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                <CaseTypeBadge type={c.type} />
-                <CaseStatusBadge status={c.status} />
+                <CaseTypeLabel type={c.type} />
+                <CaseStatusBadge status={c.status} discreet={statusKnown} />
                 <span className="text-muted-foreground">{relativeTime(c.detectedAt)}</span>
               </div>
             </Link>
@@ -267,7 +282,7 @@ export function CasesView() {
             label={CASE_TYPE_LABEL[t]}
             hint="abertos"
             value={counts[t]}
-            accent={CASE_TYPE_ACCENT[t]}
+            icon={CASE_TYPE_ICON[t]}
             pressed={type === t && status === 'OPEN'}
             onClick={() => filter(type === t ? 'ALL' : t, 'OPEN')}
           />
@@ -276,7 +291,8 @@ export function CasesView() {
           label="Resolvidos"
           hint="no total"
           value={resolved}
-          accent="text-emerald-300"
+          icon={CheckCircle2}
+          iconClassName="text-status-ok"
           pressed={type === 'ALL' && status === 'RESOLVED'}
           onClick={() => filter('ALL', status === 'RESOLVED' ? 'OPEN' : 'RESOLVED')}
         />
@@ -324,7 +340,7 @@ export function CasesView() {
             <LoadingState rows={6} />
           ) : cases.data && cases.data.data.length > 0 ? (
             <>
-              <CasesTable page={cases.data} />
+              <CasesTable page={cases.data} statusKnown={status !== 'ALL'} />
               <nav
                 aria-label="Paginação"
                 className="flex items-center justify-between gap-2 text-sm"

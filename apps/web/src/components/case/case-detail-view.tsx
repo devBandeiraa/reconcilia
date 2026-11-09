@@ -4,7 +4,7 @@ import { type CaseDetail, CaseDetailSchema, type TimelineItem } from '@reconcili
 import { ArrowLeft, Copy } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import { CaseStatusBadge, CaseTypeBadge } from '@/components/badges';
+import { CaseStatusBadge, CaseTypeLabel } from '@/components/badges';
 import { ErrorState, LoadingState, WakingNotice } from '@/components/states';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { brl, dateTime, EVENT_LABEL, SOURCE_LABEL } from '@/lib/format';
@@ -40,7 +40,7 @@ function Time({ iso, timeZone }: { iso: string; timeZone: string }) {
 function DuplicateMark({ item }: { item: TimelineItem }) {
   if (!item.duplicate) return null;
   return (
-    <span className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 text-xs text-amber-300">
+    <span className="inline-flex items-center gap-1 rounded border border-status-attention/35 bg-status-attention/12 px-1.5 text-xs text-status-attention">
       <Copy className="size-3" aria-hidden="true" />
       duplicado ×{item.receivedCount ?? 2}
     </span>
@@ -58,7 +58,7 @@ function EventList({ items, timeZone }: { items: TimelineItem[]; timeZone: strin
           key={`${item.eventId ?? item.type}-${i}`}
           className={cn(
             'rounded-md border p-2',
-            item.duplicate && 'border-amber-500/40 bg-amber-500/5',
+            item.duplicate && 'border-status-attention/35 bg-status-attention/5',
           )}
         >
           <div className="flex items-center justify-between gap-2">
@@ -148,7 +148,7 @@ function Timeline({ detail, timeZone }: { detail: CaseDetail; timeZone: string }
                 className={cn(
                   'absolute top-1.5 -left-[25px] size-2.5 rounded-full border-2',
                   item.duplicate
-                    ? 'border-amber-400 bg-amber-400'
+                    ? 'border-status-attention bg-status-attention'
                     : 'border-muted-foreground bg-background',
                 )}
               />
@@ -277,7 +277,7 @@ export function CaseDetailView({ id }: { id: string }) {
             {data.case.orderExternalId}
           </h1>
           <div className="flex flex-wrap items-center gap-2">
-            <CaseTypeBadge type={data.case.type} />
+            <CaseTypeLabel type={data.case.type} />
             <CaseStatusBadge status={data.case.status} />
             <span className="text-muted-foreground text-sm tabular-nums">
               {brl(data.case.amountCents)}

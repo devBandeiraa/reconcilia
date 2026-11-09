@@ -15,12 +15,12 @@ const LINKS = [
 function ApiStatus() {
   const health = useApi('/health', HealthResponseSchema, { pollMs: 30_000 });
   const [label, dot] = health.data
-    ? ['API no ar', 'bg-emerald-400']
+    ? ['API no ar', 'bg-status-ok']
     : health.waking
-      ? ['API acordando…', 'bg-amber-400 animate-pulse motion-reduce:animate-none']
+      ? ['API acordando…', 'bg-status-attention animate-pulse motion-reduce:animate-none']
       : health.error
-        ? ['API fora do ar', 'bg-red-400']
-        : ['Verificando a API…', 'bg-zinc-500'];
+        ? ['API fora do ar', 'bg-destructive']
+        : ['Verificando a API…', 'bg-status-muted'];
   return (
     <span className="text-muted-foreground flex items-center gap-2 text-xs" role="status">
       <span aria-hidden="true" className={cn('size-2 rounded-full', dot)} />
