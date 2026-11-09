@@ -5,14 +5,17 @@ import {
   ActionDecisionSchema,
   ActionViewSchema,
   CaseDetailSchema,
+  DEV_SESSION_SECRET,
   LedgerBalanceSchema,
   ReconciliationResultSchema,
+  SessionResponseSchema,
 } from '@reconcilia/shared';
 import { buildMessages, generateScenario, PATHS } from '@reconcilia/simulator';
 import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ActionKind, Prisma } from '../src/generated/prisma/client.js';
+import { issueOperatorToken } from '../src/session/operator-token.js';
 import { type CaseUnderTest, caseOf } from './support/agent-fixtures.js';
 import { clearQueues, createTestApp, signedPost, waitFor } from './support/test-app.js';
 import { createTestPrisma, TEST_DATABASE_URL, truncateAll } from './support/test-db.js';
@@ -23,6 +26,8 @@ let server: Server;
 
 // Casos escolhidos antes de qualquer mudança: cada teste usa o seu.
 const cases: Record<string, CaseUnderTest> = {};
+// Token de operador por nome, emitido pelo POST /session.
+const tokens: Record<string, string> = {};
 
 beforeAll(async () => {
   app = await createTestApp();
@@ -39,6 +44,12 @@ beforeAll(async () => {
   cases.mis1 = await caseOf(prisma, 'AMOUNT_MISMATCH', 1);
   cases.can0 = await caseOf(prisma, 'CAPTURE_ON_CANCELED_ORDER', 0);
   cases.can1 = await caseOf(prisma, 'CAPTURE_ON_CANCELED_ORDER', 1);
+  cases.dup1 = await caseOf(prisma, 'DUPLICATE_WEBHOOK', 1);
+
+  for (const operator of ['ana@loja.com', 'bruno@loja.com']) {
+    const res = await request(server).post('/session').send({ operator }).expect(200);
+    tokens[operator] = SessionResponseSchema.parse(res.body).token;
+  }
 });
 
 afterAll(async () => {
@@ -67,10 +78,14 @@ async function pendingAction(caseId: string, kind: ActionKind, params: Prisma.In
   return prisma.action.create({ data: { investigationId: investigation.id, kind, params } });
 }
 
-const approve = (id: string, decidedBy = 'ana@loja.com') =>
-  request(server).post(`/actions/${id}/approve`).send({ decidedBy });
-const reject = (id: string, decidedBy = 'ana@loja.com', reason?: string) =>
-  request(server).post(`/actions/${id}/reject`).send({ decidedBy, reason });
+const bearer = (operator: string) => `Bearer ${tokens[operator]}`;
+const approve = (id: string, operator = 'ana@loja.com') =>
+  request(server).post(`/actions/${id}/approve`).set('authorization', bearer(operator)).send({});
+const reject = (id: string, operator = 'ana@loja.com', reason?: string) =>
+  request(server)
+    .post(`/actions/${id}/reject`)
+    .set('authorization', bearer(operator))
+    .send(reason ? { reason } : {});
 
 const ledgerEntriesOf = (transactionId: string) =>
   prisma.ledgerEntry.count({ where: { transactionId } });
@@ -319,10 +334,86 @@ describe('recusar e erros', () => {
     expect(await checksum()).toBe(before);
   });
 
-  it('ação inexistente → 404; corpo sem decidedBy → 400', async () => {
+  it('ação inexistente → 404; motivo vazio → 400', async () => {
     await approve('0195f2a0-0000-7000-8000-000000000000').expect(404);
     const action = await prisma.action.findFirstOrThrow({ where: { status: 'EXECUTED' } });
-    await request(server).post(`/actions/${action.id}/approve`).send({}).expect(400);
+    await request(server)
+      .post(`/actions/${action.id}/reject`)
+      .set('authorization', bearer('ana@loja.com'))
+      .send({ reason: '' })
+      .expect(400);
+  });
+});
+
+describe('identidade de quem decide (token de operador)', () => {
+  it('POST /session emite um token de 24h; nome vazio → 400', async () => {
+    const res = await request(server).post('/session').send({ operator: '  Carla  ' }).expect(200);
+    const session = SessionResponseSchema.parse(res.body);
+    expect(session.operator).toBe('Carla');
+    const hours = (Date.parse(session.expiresAt) - Date.now()) / 3_600_000;
+    expect(hours).toBeGreaterThan(23.9);
+    expect(hours).toBeLessThanOrEqual(24);
+    await request(server).post('/session').send({ operator: ' ' }).expect(400);
+  });
+
+  it('aprovar ou recusar sem token válido → 401 e nada muda', async () => {
+    const c = cases.dup1!;
+    const action = await pendingAction(c.caseId, 'IGNORE_DUPLICATE', {
+      eventId: c.duplicateEventId,
+    });
+    const [payload, signature] = tokens['ana@loja.com']!.split('.');
+    const forged = Buffer.from(JSON.stringify({ op: 'chefe', exp: 4_102_444_800 })).toString(
+      'base64url',
+    );
+    const expired = issueOperatorToken(
+      DEV_SESSION_SECRET,
+      'ana@loja.com',
+      new Date(Date.now() - 25 * 3_600_000),
+    ).token;
+    const otherSecret = issueOperatorToken('outro-segredo-qualquer-123', 'ana@loja.com').token;
+
+    const url = `/actions/${action.id}/approve`;
+    await request(server).post(url).send({ decidedBy: 'ana@loja.com' }).expect(401);
+    for (const token of [
+      'lixo',
+      `${forged}.${signature}`, // payload trocado, assinatura antiga
+      `${payload}.${signature}x`,
+      expired,
+      otherSecret,
+    ]) {
+      await request(server).post(url).set('authorization', `Bearer ${token}`).send({}).expect(401);
+    }
+    await request(server).post(`/actions/${action.id}/reject`).send({}).expect(401);
+
+    expect(await prisma.action.findUniqueOrThrow({ where: { id: action.id } })).toMatchObject({
+      status: 'PENDING',
+      decidedBy: null,
+    });
+    expect(await auditEvents(action.id)).toEqual([]);
+  });
+
+  it('quem fica na ação e na auditoria é o operador do token, não o decidedBy do corpo', async () => {
+    const c = cases.dup1!;
+    const action = await prisma.action.findFirstOrThrow({
+      where: { investigation: { caseId: c.caseId }, status: 'PENDING' },
+    });
+
+    const res = await request(server)
+      .post(`/actions/${action.id}/approve`)
+      .set('authorization', bearer('bruno@loja.com'))
+      .send({ decidedBy: 'diretor-financeiro' })
+      .expect(200);
+
+    expect(ActionDecisionSchema.parse(res.body).action.decidedBy).toBe('bruno@loja.com');
+    const actors = await prisma.auditEntry.findMany({
+      where: { actionId: action.id },
+      select: { event: true, actor: true },
+      orderBy: { at: 'asc' },
+    });
+    expect(actors).toEqual([
+      { event: 'APPROVED', actor: 'bruno@loja.com' },
+      { event: 'EXECUTED', actor: 'bruno@loja.com' },
+    ]);
   });
 });
 

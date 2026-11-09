@@ -212,7 +212,7 @@ model Action {
   params          Json
   status          ActionStatus  @default(PENDING)
   decidedAt       DateTime?     @map("decided_at") @db.Timestamptz(3)
-  /// Quem aprovou ou recusou (até haver login, informado na requisição).
+  /// Quem aprovou ou recusou: o operador do token de sessão (POST /session), não o corpo.
   decidedBy       String?       @map("decided_by")
   rejectionReason String?       @map("rejection_reason")
   /// O que a execução fez (ou já encontrou feito).

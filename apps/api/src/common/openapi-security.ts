@@ -1,6 +1,23 @@
 import { SIGNATURE_HEADER } from '@reconcilia/shared';
 import type { DocumentBuilder } from '@nestjs/swagger';
 
+/** Nome do esquema de segurança das decisões (token de operador) no OpenAPI. */
+export const OPERATOR_TOKEN = 'operatorToken';
+
+/** Documenta o token de operador das decisões (POST /session). */
+export function addOperatorToken(builder: DocumentBuilder): DocumentBuilder {
+  return builder.addBearerAuth(
+    {
+      type: 'http',
+      scheme: 'bearer',
+      description:
+        'Token de operador emitido por POST /session (HMAC, 24h). Identificação de demonstração, ' +
+        'não autenticação real.',
+    },
+    OPERATOR_TOKEN,
+  );
+}
+
 /** Nome do esquema de segurança dos webhooks no OpenAPI. */
 export const WEBHOOK_SIGNATURE = 'webhookSignature';
 
