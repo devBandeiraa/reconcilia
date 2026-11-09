@@ -136,8 +136,9 @@ describe('assinatura com timestamp (janela de 300s)', () => {
     const raw = JSON.stringify(messages.store);
     const header = sign(DEV_WEBHOOK_SECRET, raw);
     await withHeader(header, raw.replace(String(order.totalCents), '1')).expect(401);
-    const [, v1] = header.split(',');
-    const otherSecond = Math.floor(Date.now() / 1000) - 1;
+    const [t, v1] = header.split(',');
+    // Um segundo antes do t assinado (derivado do header, não do relógio: sem corrida na virada).
+    const otherSecond = Number(t!.slice(2)) - 1;
     await withHeader(`t=${otherSecond},${v1}`, raw).expect(401);
     await withHeader(`sha256=${v1!.slice(3)}`, raw).expect(401);
     await withHeader(header.replace('v1=', 'v0='), raw).expect(401);

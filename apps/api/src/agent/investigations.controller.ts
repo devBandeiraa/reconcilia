@@ -8,6 +8,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiTags,
+  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import {
   type InvestigateResponse,
@@ -17,6 +18,7 @@ import {
 } from '@reconcilia/shared';
 import { z } from 'zod';
 import { toOpenApiSchema } from '../common/openapi.js';
+import { HeavyRoute } from '../common/throttle.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { InvestigationsService } from './investigations.service.js';
 
@@ -34,6 +36,8 @@ export class InvestigationsController {
 
   @Post('cases/:id/investigate')
   @HttpCode(HttpStatus.ACCEPTED)
+  @HeavyRoute()
+  @ApiTooManyRequestsResponse({ description: 'Limite por IP ou teto diário da demo atingido' })
   @ApiOperation({
     summary: 'Pede ao agente de IA que investigue o caso',
     description:

@@ -1,4 +1,11 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   type Investigation,
   type InvestigationStep,
@@ -41,6 +48,29 @@ export class InvestigationsService {
   ) {}
 
   /**
+   * Teto diário da demo pública (DEMO_MAX_INVESTIGATIONS_PER_DAY, dia em UTC): protege a cota do
+   * modelo e o banco gratuito. Contado no banco, então vale mesmo depois de reiniciar a api. Não
+   * é dinheiro: duas chamadas ao mesmo tempo podem passar uma do teto, e tudo bem.
+   */
+  private async assertDailyCap(): Promise<void> {
+    const max = this.env.DEMO_MAX_INVESTIGATIONS_PER_DAY;
+    if (max === 0) return;
+    const now = new Date();
+    const startOfDay = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const today = await this.prisma.investigation.count({
+      where: { createdAt: { gte: startOfDay } },
+    });
+    if (today >= max) {
+      throw new HttpException(
+        `A demo atingiu o teto de ${max} investigações hoje. O contador zera à meia-noite (UTC).`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  /**
    * Cria a investigação QUEUED e enfileira na mesma transação. Uma investigação ativa por caso
    * é garantida pelo índice único parcial; se já houver uma, ela é devolvida.
    */
@@ -66,6 +96,7 @@ export class InvestigationsService {
 
     const existing = await active();
     if (existing) return existing;
+    await this.assertDailyCap();
 
     try {
       return await this.prisma.$transaction(async (tx) => {

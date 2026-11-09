@@ -5,6 +5,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import {
   type SimulationOptions,
@@ -14,6 +15,7 @@ import {
 } from '@reconcilia/shared';
 import { z } from 'zod';
 import { toOpenApiSchema } from '../common/openapi.js';
+import { HeavyRoute } from '../common/throttle.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { SimulationService } from './simulation.service.js';
 
@@ -24,8 +26,10 @@ export class SimulationController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
+  @HeavyRoute()
+  @ApiTooManyRequestsResponse({ description: 'Limite por IP ou teto diário da demo atingido' })
   @ApiOperation({
-    summary: 'Gera tráfego com as 3 falhas e devolve o gabarito',
+    summary: 'Gera tráfego com as 4 falhas e devolve o gabarito',
     description:
       'Mesmo gerador do CLI. Sem seed, sorteia uma; com a mesma seed, o cenário se repete ' +
       '(e o reenvio é idempotente).',

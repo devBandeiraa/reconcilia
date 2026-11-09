@@ -8,8 +8,11 @@ import {
 import { type HealthResponse, HealthResponseSchema } from '@reconcilia/shared';
 import { toOpenApiSchema } from '../common/openapi.js';
 import { API_VERSION } from '../version.js';
+import { NoThrottle } from '../common/throttle.js';
 
 @ApiTags('health')
+// O health check do Render bate aqui a cada poucos segundos: sem limite.
+@NoThrottle()
 @Controller('health')
 export class HealthController {
   @Get()

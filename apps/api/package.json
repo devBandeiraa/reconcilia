@@ -1,9 +1,14 @@
 {
   "name": "@reconcilia/api",
-  "version": "0.11.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "API NestJS do Reconcilia (o worker roda no mesmo processo).",
+  "files": [
+    "dist",
+    "prisma",
+    "prisma.config.ts"
+  ],
   "scripts": {
     "build": "prisma generate && nest build -p tsconfig.build.json",
     "dev": "nest start --watch -p tsconfig.build.json",
@@ -22,6 +27,7 @@
     "@nestjs/core": "12.4.0",
     "@nestjs/platform-express": "12.4.0",
     "@nestjs/swagger": "12.1.1",
+    "@nestjs/throttler": "6.7.1",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "@reconcilia/shared": "workspace:*",
@@ -31,6 +37,7 @@
     "pg-boss": "12.38.1",
     "pino": "10.4.0",
     "pino-http": "11.0.0",
+    "prisma": "7.10.1",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "zod": "4.6.7"
@@ -42,7 +49,6 @@
     "@types/pg": "8.23.1",
     "@types/supertest": "7.2.1",
     "pino-pretty": "13.2.0",
-    "prisma": "7.10.1",
     "supertest": "7.3.1",
     "tsx": "4.23.15",
     "unplugin-swc": "2.0.0",

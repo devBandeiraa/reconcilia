@@ -54,6 +54,14 @@ export const EnvSchema = z
       .default('http://localhost:3000')
       .transform((value) => value.split(',').map((origin) => origin.trim()))
       .pipe(z.array(z.url()).min(1)),
+    /** Requisições por minuto por IP em qualquer rota (demo pública). */
+    THROTTLE_PER_MINUTE: z.coerce.number().int().min(1).max(100_000).default(120),
+    /** Requisições por minuto por IP nas rotas pesadas: simular, conciliar e investigar. */
+    THROTTLE_HEAVY_PER_MINUTE: z.coerce.number().int().min(1).max(100_000).default(10),
+    /** Investigações por dia (UTC) na instância inteira; 0 desliga o teto. */
+    DEMO_MAX_INVESTIGATIONS_PER_DAY: z.coerce.number().int().min(0).max(100_000).default(50),
+    /** Quantos proxies confiáveis há na frente da api (Render: 1), para o IP real do cliente. */
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
     /** Fuso da loja: só para exibir horários locais; no banco tudo é UTC. */
     STORE_TIMEZONE: z
       .string()
@@ -77,6 +85,18 @@ export const EnvSchema = z
         code: 'custom',
         path: ['WEBHOOK_SECRET'],
         message: 'em produção, use um segredo próprio com pelo menos 32 caracteres',
+      });
+    }
+    if (
+      env.NODE_ENV === 'production' &&
+      env.CORS_ORIGIN.some(
+        (origin) => !origin.startsWith('https://') || origin.includes('localhost'),
+      )
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CORS_ORIGIN'],
+        message: 'em produção, liste só origens https da web (ex.: https://reconcilia.vercel.app)',
       });
     }
     if (

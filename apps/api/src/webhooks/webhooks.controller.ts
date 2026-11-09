@@ -26,6 +26,7 @@ import { toOpenApiSchema } from '../common/openapi.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { WebhookSignatureGuard } from './webhook-signature.guard.js';
 import { type IngestResult, WebhooksService } from './webhooks.service.js';
+import { NoThrottle } from '../common/throttle.js';
 
 /** O mínimo do response do Express que usamos: status por resultado (200 ou 202). */
 interface JsonResponse {
@@ -53,6 +54,8 @@ const ACK_SCHEMA = toOpenApiSchema(WebhookAckSchema);
 })
 @ApiBadRequestResponse({ description: 'Payload fora do contrato' })
 @ApiUnauthorizedResponse({ description: 'X-Signature ausente ou inválida; nada é gravado' })
+// Autenticado por HMAC e chega em rajada pelo próprio /simulate: sem limite por IP.
+@NoThrottle()
 @Controller('webhooks')
 export class WebhooksController {
   constructor(

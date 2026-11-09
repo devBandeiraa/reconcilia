@@ -8,7 +8,13 @@ export const DATABASE_URL = Symbol('DATABASE_URL');
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnApplicationShutdown {
   constructor(@Inject(DATABASE_URL) databaseUrl: string) {
-    super({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+    super({
+      adapter: new PrismaPg({ connectionString: databaseUrl }),
+      // Num pico (o /simulate grava dezenas de webhooks em paralelo), as conexões do pool ficam
+      // ocupadas. O padrão do Prisma desiste de abrir a transação em 2s (P2028) e a requisição
+      // vira 500; aqui ela espera a vez por até 10s. O tempo da transação em si não muda.
+      transactionOptions: { maxWait: 10_000 },
+    });
   }
 
   async onModuleInit(): Promise<void> {

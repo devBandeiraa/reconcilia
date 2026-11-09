@@ -18,6 +18,10 @@ describe('loadEnv', () => {
       RECONCILIATION_CRON: '*/5 * * * *',
       DEMO_REPLAY: true,
       GEMINI_MODEL: 'gemini-3.5-flash',
+      THROTTLE_PER_MINUTE: 120,
+      THROTTLE_HEAVY_PER_MINUTE: 10,
+      DEMO_MAX_INVESTIGATIONS_PER_DAY: 50,
+      TRUST_PROXY_HOPS: 1,
       STORE_TIMEZONE: 'America/Sao_Paulo',
       CORS_ORIGIN: ['http://localhost:3000'],
     });
@@ -46,8 +50,24 @@ describe('loadEnv', () => {
         NODE_ENV: 'production',
         WEBHOOK_SECRET: 'x'.repeat(32),
         SESSION_SECRET: 'y'.repeat(32),
+        CORS_ORIGIN: 'https://reconcilia.vercel.app',
       }).NODE_ENV,
     ).toBe('production');
+  });
+
+  it('em produção, CORS_ORIGIN só aceita origens https que não sejam localhost', () => {
+    const prod = {
+      NODE_ENV: 'production',
+      WEBHOOK_SECRET: 'x'.repeat(32),
+      SESSION_SECRET: 'y'.repeat(32),
+    };
+    expect(() => loadEnv(prod)).toThrow(/CORS_ORIGIN/); // o padrão é http://localhost:3000
+    expect(() => loadEnv({ ...prod, CORS_ORIGIN: 'http://reconcilia.vercel.app' })).toThrow(
+      /CORS_ORIGIN/,
+    );
+    expect(loadEnv({ ...prod, CORS_ORIGIN: 'https://reconcilia.vercel.app' }).CORS_ORIGIN).toEqual([
+      'https://reconcilia.vercel.app',
+    ]);
   });
 
   it('sem DEMO_REPLAY, exige GEMINI_API_KEY (vazia conta como ausente)', () => {

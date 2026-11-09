@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
@@ -21,6 +22,10 @@ export async function createApp(env: Env): Promise<INestApplication> {
 /** Logger, shutdown e Swagger. Separado para os testes montarem o app com providers trocados. */
 export function setupApp(app: INestApplication): INestApplication {
   app.useLogger(app.get(Logger));
+  // Atrás do proxy do Render: req.ip passa a ser o IP do cliente (X-Forwarded-For), e o limite
+  // por IP do throttler vale por pessoa, não para todo mundo junto.
+  const hops = app.get<Env>(ENV).TRUST_PROXY_HOPS;
+  if (hops > 0) (app as NestExpressApplication).set('trust proxy', hops);
   app.enableShutdownHooks();
   // A web chama a api direto do navegador: só as origens configuradas.
   app.enableCors({ origin: app.get<Env>(ENV).CORS_ORIGIN, methods: ['GET', 'POST'] });

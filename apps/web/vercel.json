@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile --ignore-scripts --filter . --filter \"@reconcilia/web...\"",
+  "buildCommand": "cd ../.. && pnpm --filter @reconcilia/shared build && pnpm --filter @reconcilia/web build"
+}
