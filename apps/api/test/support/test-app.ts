@@ -43,6 +43,10 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<INest
     RECONCILIATION_CRON: 'off',
     // Agente em modo demonstração por padrão; os testes do agente trocam o LlmClient.
     DEMO_REPLAY: 'true',
+    // Proteção da demo desligada nos testes (protection.test.ts liga de propósito).
+    THROTTLE_PER_MINUTE: '100000',
+    THROTTLE_HEAVY_PER_MINUTE: '100000',
+    DEMO_MAX_INVESTIGATIONS_PER_DAY: '0',
     ...options.env,
   });
   let builder = Test.createTestingModule({ imports: [AppModule.forRoot(env)] });

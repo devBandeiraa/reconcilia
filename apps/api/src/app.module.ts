@@ -1,7 +1,10 @@
 import { type DynamicModule, Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { ActionsModule } from './actions/actions.module.js';
 import { AgentModule } from './agent/agent.module.js';
+import { throttlerOptions } from './common/throttle.js';
 import { ConfigModule } from './config/config.module.js';
 import type { Env } from './config/env.js';
 import { HealthController } from './health/health.controller.js';
@@ -30,6 +33,7 @@ export class AppModule {
                 : undefined,
           },
         }),
+        ThrottlerModule.forRoot(throttlerOptions(env)),
         PrismaModule.forRoot(env.DATABASE_URL),
         QueueModule,
         LedgerModule,
@@ -42,6 +46,8 @@ export class AppModule {
         SimulationModule,
       ],
       controllers: [HealthController],
+      // Limite por IP em todas as rotas (ver common/throttle.ts para as exceções).
+      providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
     };
   }
 }

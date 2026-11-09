@@ -34,9 +34,12 @@ import { WEBHOOK_SIGNATURE } from '../common/openapi-security.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { WebhookSignatureGuard } from '../webhooks/webhook-signature.guard.js';
 import { GatewayStatementService } from './gateway-statement.service.js';
+import { NoThrottle } from '../common/throttle.js';
 
 @ApiTags('simulador')
 @ApiBadRequestResponse({ description: 'Entrada fora do contrato' })
+// Autenticado por HMAC e chega em rajada pelo próprio /simulate: sem limite por IP.
+@NoThrottle()
 @Controller('sim/gateway/statement')
 export class GatewayStatementController {
   constructor(private readonly statement: GatewayStatementService) {}

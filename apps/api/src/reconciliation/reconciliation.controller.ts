@@ -4,9 +4,11 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { type ReconciliationResult, ReconciliationResultSchema } from '@reconcilia/shared';
 import { toOpenApiSchema } from '../common/openapi.js';
+import { HeavyRoute } from '../common/throttle.js';
 import { ReconciliationService } from './reconciliation.service.js';
 
 @ApiTags('casos')
@@ -16,6 +18,8 @@ export class ReconciliationController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
+  @HeavyRoute()
+  @ApiTooManyRequestsResponse({ description: 'Limite por IP ou teto diário da demo atingido' })
   @ApiOperation({
     summary: 'Roda a conciliação agora',
     description:
