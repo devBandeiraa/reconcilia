@@ -25,12 +25,12 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { apiRequest } from '@/lib/api';
+import { ApiError, apiRequest } from '@/lib/api';
 import { ACTION_LABEL, brl } from '@/lib/format';
+import { endOperatorSession, startOperatorSession, useOperator } from '@/lib/operator';
 import { useApi } from '@/lib/use-api';
 
 const POLL_MS = 1_500;
-const NAME_KEY = 'reconcilia:decidedBy';
 
 const INVESTIGATION_LABEL: Record<Investigation['status'], string> = {
   QUEUED: 'Na fila',
@@ -45,23 +45,6 @@ const ACTION_STATUS_LABEL = {
   REJECTED: 'Recusada',
   EXECUTED: 'Executada',
 } as const;
-
-/** localStorage pode não existir (aba privada, bloqueio): o nome só deixa de ser lembrado. */
-function readName(): string {
-  try {
-    return localStorage.getItem(NAME_KEY) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-function saveName(name: string) {
-  try {
-    localStorage.setItem(NAME_KEY, name);
-  } catch {
-    // sem armazenamento: segue sem lembrar
-  }
-}
 
 function formatParam(key: string, value: unknown): string {
   if (typeof value === 'number' && key.endsWith('Cents')) return brl(value);
@@ -99,8 +82,8 @@ function Decision({
 }) {
   const nameId = useId();
   const reasonId = useId();
-  // Só renderiza no cliente (depois de buscar a investigação), então ler o localStorage aqui é seguro.
-  const [name, setName] = useState(readName);
+  const operator = useOperator();
+  const [name, setName] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
   const [message, setMessage] = useState<{ text: string; tone: 'info' | 'error' } | null>(null);
@@ -111,25 +94,24 @@ function Decision({
 
   async function decide(kind: 'approve' | 'reject') {
     if (!action) return;
-    const decidedBy = name.trim();
-    if (!decidedBy) {
+    if (!operator && !name.trim()) {
       setMessage({
         tone: 'error',
-        text: 'Diga seu nome antes de decidir: ele vai para a auditoria.',
+        text: 'Escolha um nome de operador antes de decidir: ele vai para a auditoria.',
       });
       return;
     }
-    saveName(decidedBy);
     setBusy(kind);
     setMessage(null);
     try {
-      const body =
-        kind === 'approve'
-          ? { decidedBy }
-          : { decidedBy, ...(reason.trim() ? { reason: reason.trim() } : {}) };
+      // Quem decide é o operador do token; a api ignora qualquer nome no corpo.
+      const session = operator ?? (await startOperatorSession(name.trim()));
+      const decidedBy = session.operator;
+      const body = kind === 'reject' && reason.trim() ? { reason: reason.trim() } : {};
       const result = await apiRequest(`/actions/${action.id}/${kind}`, ActionDecisionSchema, {
         method: 'POST',
         body,
+        token: session.token,
       });
       setRejectOpen(false);
       setMessage({
@@ -141,7 +123,16 @@ function Decision({
       });
       onDecided();
     } catch (error) {
-      setMessage({ tone: 'error', text: error instanceof Error ? error.message : String(error) });
+      if (error instanceof ApiError && error.status === 401) {
+        endOperatorSession();
+        setRejectOpen(false);
+        setMessage({
+          tone: 'error',
+          text: 'A sessão de operador expirou. Escolha o nome de novo para decidir.',
+        });
+      } else {
+        setMessage({ tone: 'error', text: error instanceof Error ? error.message : String(error) });
+      }
     } finally {
       setBusy(null);
     }
@@ -170,17 +161,38 @@ function Decision({
           <p className="text-muted-foreground text-sm">
             O agente só sugere. Nada acontece até uma pessoa aprovar.
           </p>
-          <div className="grid gap-1.5">
-            <Label htmlFor={nameId}>Seu nome</Label>
-            <Input
-              id={nameId}
-              value={name}
-              maxLength={100}
-              autoComplete="name"
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Quem está decidindo"
-            />
-          </div>
+          {operator ? (
+            <p className="text-sm">
+              Decidindo como <strong className="font-medium">{operator.operator}</strong>.{' '}
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground underline underline-offset-2"
+                onClick={() => {
+                  setName(operator.operator);
+                  endOperatorSession();
+                }}
+              >
+                Trocar
+              </button>
+            </p>
+          ) : (
+            <div className="grid gap-1.5">
+              <Label htmlFor={nameId}>Nome de operador</Label>
+              <Input
+                id={nameId}
+                value={name}
+                maxLength={60}
+                autoComplete="name"
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Quem está decidindo"
+                aria-describedby={`${nameId}-ajuda`}
+              />
+              <p id={`${nameId}-ajuda`} className="text-muted-foreground text-xs">
+                Escolhido uma vez e lembrado por 24h. É uma identificação de demonstração, sem
+                senha.
+              </p>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => void decide('approve')} disabled={busy !== null}>
               {busy === 'approve' ? (

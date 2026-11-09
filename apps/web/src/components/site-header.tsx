@@ -3,6 +3,7 @@
 import { HealthResponseSchema } from '@reconcilia/shared';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { endOperatorSession, useOperator } from '@/lib/operator';
 import { useApi } from '@/lib/use-api';
 import { cn } from '@/lib/utils';
 
@@ -25,6 +26,24 @@ function ApiStatus() {
       <span aria-hidden="true" className={cn('size-2 rounded-full', dot)} />
       {label}
       {health.data && <span className="hidden sm:inline">· v{health.data.version}</span>}
+    </span>
+  );
+}
+
+/** Quem está decidindo nesta demo (token de operador). Some quando não há sessão. */
+function OperatorIndicator() {
+  const operator = useOperator();
+  if (!operator) return null;
+  return (
+    <span className="text-muted-foreground hidden items-center gap-1 text-xs sm:flex">
+      Operador: <span className="text-foreground">{operator.operator}</span>
+      <button
+        type="button"
+        onClick={endOperatorSession}
+        className="hover:text-foreground underline underline-offset-2"
+      >
+        sair
+      </button>
     </span>
   );
 }
@@ -57,7 +76,8 @@ export function SiteHeader() {
             );
           })}
         </nav>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-4">
+          <OperatorIndicator />
           <ApiStatus />
         </div>
       </div>
