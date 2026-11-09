@@ -1,0 +1,15 @@
+# Só o que a imagem da api precisa; o resto fica fora do contexto do build.
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.github
+.husky
+docs
+apps/web
+apps/api/src/generated
